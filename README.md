@@ -36,9 +36,12 @@ Platform (over the `prometheux_chain` SDK):
   events (append to `<workspace>/.px/openlineage.jsonl` and/or `--openlineage-url` for a
   catalog like Marquez). `--project` scopes the lookup; `--persist` materializes outputs;
   `--no-openlineage` disables emit.
-- `px context apply [dir]` — create the context layer from `*.context.md` manifests:
-  one note per referenced body file (scope/activation/kind from the manifest) plus the
-  declared `relates_to`/… links. Notes are created (not yet upserted).
+- `px context apply [dir]` — apply the context layer from `*.context.md` manifests:
+  one note per referenced body file (scope/activation/kind), plus links
+  (`relates_to`/`defines`/… note↔note or note→`concept:<predicate>`). **Idempotent** —
+  a `.px/context-state.json` map keyed by `(manifest, path)` drives create / update /
+  skip-unchanged; `--prune` deletes notes dropped from the manifests. Commit that state
+  file so re-apply stays idempotent across machines.
 
 Next: ontology/app apply, richer `context` sync.
 
