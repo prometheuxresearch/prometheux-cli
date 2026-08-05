@@ -12,8 +12,8 @@ class _FakePx:
         self.fail = fail
         self.ran = []
 
-    def run_concept(self, ontology_id, concept_name, scope="user", params=None, **kw):
-        self.ran.append((ontology_id, concept_name, scope, params))
+    def run_concept(self, ontology_id, concept_name, scope="user", params=None, persist_outputs=False, **kw):
+        self.ran.append((ontology_id, concept_name, scope, params, persist_outputs))
         if self.fail:
             raise RuntimeError("engine boom")
         return {"status": "ok"}
@@ -47,7 +47,7 @@ def test_run_emits_start_and_complete(tmp_path: Path, monkeypatch):
 
     result = CliRunner().invoke(cli, ["run", "risk", str(tmp_path)])
     assert result.exit_code == 0, result.output
-    assert fake.ran == [("pid1", "risk", "user", {})]
+    assert fake.ran == [("pid1", "risk", "user", {}, False)]  # persist off by default
 
     evs = _events(tmp_path)
     assert [e["eventType"] for e in evs] == ["START", "COMPLETE"]
@@ -55,6 +55,15 @@ def test_run_emits_start_and_complete(tmp_path: Path, monkeypatch):
     # derived edge: risk depends on customer
     assert {d["name"] for d in evs[0]["inputs"]} == {"customer"}
     assert evs[1]["outputs"][0]["name"] == "risk"
+
+
+def test_run_persist_flag(tmp_path: Path, monkeypatch):
+    fake = _FakePx()
+    monkeypatch.setattr(cli_module.run_cmd, "connected_sdk", lambda **k: (fake, "u", "t"))
+    _workspace(tmp_path)
+    result = CliRunner().invoke(cli, ["run", "risk", str(tmp_path), "--persist"])
+    assert result.exit_code == 0, result.output
+    assert fake.ran[0][4] is True  # persist_outputs passed through
 
 
 def test_run_failure_emits_fail(tmp_path: Path, monkeypatch):

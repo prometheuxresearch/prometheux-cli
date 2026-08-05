@@ -26,12 +26,13 @@ from ..validation import find_workspace_root
               help="Limit the search to the named project(s). Repeatable.")
 @click.option("--param", "params", multiple=True, metavar="KEY=VALUE",
               help="Run parameter (repeatable).")
+@click.option("--persist", is_flag=True, help="Persist (materialize) the concept's outputs.")
 @click.option("--openlineage-file", "ol_file", default=None, type=click.Path(path_type=Path),
               help="Append OpenLineage events here (default: <workspace>/.px/openlineage.jsonl).")
 @click.option("--openlineage-url", "ol_url", default=None,
               help="Also POST each OpenLineage event to this URL (e.g. a Marquez /api/v1/lineage).")
 @click.option("--no-openlineage", is_flag=True, help="Do not emit OpenLineage events.")
-def run(concept, path, project_selectors, params, ol_file, ol_url, no_openlineage):
+def run(concept, path, project_selectors, params, persist, ol_file, ol_url, no_openlineage):
     """Run CONCEPT (an output predicate) and emit OpenLineage lineage events."""
     start = path or Path.cwd()
     root = find_workspace_root(start)
@@ -80,7 +81,10 @@ def run(concept, path, project_selectors, params, ol_file, ol_url, no_openlineag
 
     emitter.emit("START", run_id, job_name, inputs, outputs)
     try:
-        px.run_concept(project.id, concept, scope=project.scope, params=_parse_params(params))
+        px.run_concept(
+            project.id, concept, scope=project.scope,
+            params=_parse_params(params), persist_outputs=persist,
+        )
     except Exception as exc:  # noqa: BLE001
         emitter.emit("FAIL", run_id, job_name, inputs, outputs, error=str(exc))
         click.echo(click.style("FAIL", fg="red", bold=True) + f": run of '{concept}' failed: {exc}", err=True)
