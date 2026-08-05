@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=../../../.px/schemas/concept-meta.schema.json
+$schema: ../../../.px/schemas/concept-meta.schema.json
+conceptType: logic
+outputPredicate: risk
+group: score
+# No binds.input for `customer`: it is another concept, so that edge is derived, not bound.

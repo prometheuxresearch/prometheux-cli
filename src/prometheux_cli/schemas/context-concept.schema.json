@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.prometheux.ai/context-concept.schema.json",
+  "title": "Context concept",
+  "description": "*.context.yaml — a context concept: a note selection. Static pins note body paths; dynamic retrieves by query. References notes by body path, never by opaque note UUID.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["conceptType", "outputPredicate", "contextMode"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "conceptType": { "type": "string", "const": "context" },
+    "outputPredicate": { "type": "string", "minLength": 1 },
+    "contextMode": { "type": "string", "enum": ["static", "dynamic"] },
+    "notes": {
+      "type": "array",
+      "description": "static only — paths into this project's context vault (ADR 0006: project scope).",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "query": {
+      "type": "string",
+      "description": "dynamic only — retrieval query over the project vault."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "contextMode": { "const": "static" } } },
+      "then": { "required": ["notes"] }
+    },
+    {
+      "if": { "properties": { "contextMode": { "const": "dynamic" } } },
+      "then": { "required": ["query"] }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.prometheux.ai/datasource.schema.json",
+  "title": "Datasource spec",
+  "description": "A connection spec. Secrets are referenced by ${ENV_VAR} placeholders and resolved from the environment at apply — never stored in the file.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["name", "type"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "minLength": 1 },
+    "type": {
+      "type": "string",
+      "description": "Connector kind, e.g. snowflake | databricks | postgres | sql | csv | parquet | json | excel.",
+      "minLength": 1
+    },
+    "file": {
+      "type": "string",
+      "description": "For a file-based type (csv/parquet/json/…): path to a LOCAL file, relative to this datasource file. At apply, `px` uploads it to the workspace disk and connects it. Omit for connection-style sources."
+    },
+    "diskPath": {
+      "type": "string",
+      "description": "Optional subdirectory under the workspace disk/ to upload `file` into (must exist server-side)."
+    }
+  }
+}

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prometheux"
+version = "0.0.1"
+description = "px — author a Prometheux workspace (lineage + context) as files and apply it over REST."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Prometheux" }]
+keywords = ["prometheux", "vadalog", "lineage", "data-as-code"]
+# Kept minimal and mainstream on purpose: every transitive dep is a bank-review item (§9/§10).
+# The platform verbs (login/pull/plan/apply) orchestrate prometheux_chain; init/validate
+# stay fully offline and never import it (it is a lazy import in sdk.py).
+dependencies = [
+    "click>=8.1",
+    "PyYAML>=6.0",
+    "jsonschema>=4.18",
+    "prometheux_chain>=0.3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+px = "prometheux_cli.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+prometheux_cli = ["schemas/*.json", "scaffold/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

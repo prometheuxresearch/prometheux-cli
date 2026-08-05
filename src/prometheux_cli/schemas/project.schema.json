@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.prometheux.ai/project.schema.json",
+  "title": "Prometheux project manifest",
+  "description": "prometheux.yaml — one project's lineage: concepts, datasources, ontology, apps, and project-scoped context.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "project"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "scope"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Server project id. Absent on a brand-new project; filled by the first apply/pull."
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "scope": {
+          "type": "string",
+          "enum": ["user", "organization"],
+          "description": "Resolved against YOUR identity only (never targets another user)."
+        }
+      }
+    },
+    "datasources": {
+      "type": "array",
+      "description": "Relative paths to datasource spec files.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "concepts": {
+      "type": "string",
+      "description": "Directory holding concept bodies + .meta.yaml files.",
+      "default": "./concepts"
+    },
+    "ontology": {
+      "type": "string",
+      "description": "Path to the ontology schema file."
+    },
+    "apps": {
+      "type": "string",
+      "description": "Directory holding *.app.yaml AppDefinitions."
+    },
+    "context": {
+      "type": "string",
+      "description": "This project's project-scoped context vault."
+    }
+  }
+}

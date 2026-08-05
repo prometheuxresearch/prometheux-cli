@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=../../../.px/schemas/context-concept.schema.json
+$schema: ../../../.px/schemas/context-concept.schema.json
+conceptType: context
+outputPredicate: company_policy
+contextMode: static
+notes:
+  # Paths into THIS project's context vault (ADR 0006: context concepts see project scope only).
+  - credit-risk.md

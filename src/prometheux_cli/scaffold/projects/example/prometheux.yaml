@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=../../.px/schemas/project.schema.json
+$schema: ../../.px/schemas/project.schema.json
+schemaVersion: 1
+project:
+  # id is absent on a brand-new project; the first apply/pull fills it in.
+  name: Example
+  scope: user
+datasources:
+  - ./datasources/snowflake_prod.yaml
+concepts: ./concepts
+ontology: ./ontology/schema.yaml
+context: ./context

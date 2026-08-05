@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.prometheux.ai/context-set.schema.json",
+  "title": "Context set manifest frontmatter",
+  "description": "The YAML frontmatter of a *.context.md manifest. Carries the Prometheux config and points at pristine body files. Note identity = (manifest, referenced path); duplicates are allowed and surfaced, never deduped.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scope", "notes"],
+  "properties": {
+    "scope": {
+      "type": "string",
+      "enum": ["global", "project"],
+      "description": "Declared here, NOT inferred from the folder."
+    },
+    "activation": {
+      "type": "string",
+      "enum": ["retrieved", "always", "on_demand"],
+      "description": "retrieved (semantic pool) | always (=rule, injected every request) | on_demand (title listed, body fetched on demand).",
+      "default": "retrieved"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["rule"],
+      "description": "Sugar for activation: always."
+    },
+    "kind": {
+      "type": "string",
+      "description": "Default kind for notes in this set, e.g. fact.",
+      "default": "fact"
+    },
+    "chunk": {
+      "description": "single note vs document-chunk. 'auto' decides by size/type.",
+      "oneOf": [
+        { "type": "string", "enum": ["auto", "none"] },
+        { "type": "boolean" }
+      ],
+      "default": "auto"
+    },
+    "notes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Body files referenced by this set. A string is a path with set defaults; an object overrides per entry.",
+      "items": {
+        "oneOf": [
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "activation": {
+                "type": "string",
+                "enum": ["retrieved", "always", "on_demand"]
+              },
+              "kind": { "type": "string" }
+            }
+          }
+        ]
+      }
+    },
+    "links": {
+      "type": "array",
+      "description": "Authored links only; derived_from is platform-owned and never written here.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to", "relation"],
+        "properties": {
+          "from": { "type": "string", "minLength": 1 },
+          "to": { "type": "string", "minLength": 1 },
+          "relation": {
+            "type": "string",
+            "enum": ["relates_to", "defines", "example_of", "contradicts"]
+          }
+        }
+      }
+    }
+  }
+}

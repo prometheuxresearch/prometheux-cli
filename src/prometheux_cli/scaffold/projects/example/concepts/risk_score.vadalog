@@ -1,0 +1,3 @@
+% risk_score derives from `customer` — the reference to customer(...) in the body
+% IS the lineage edge. You never hand-write edges; `px plan` derives them.
+risk(Id, Country) :- customer(Id, _, Country).

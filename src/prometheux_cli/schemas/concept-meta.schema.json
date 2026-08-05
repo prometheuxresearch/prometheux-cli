@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.prometheux.ai/concept-meta.schema.json",
+  "title": "Concept meta envelope",
+  "description": "*.meta.yaml — the shared, Vadalog-shaped envelope for a logic/sql/cypher/python concept. The body (rules) lives in the sibling body file. Edges are derived from predicates, never written here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["conceptType", "outputPredicate"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "conceptType": {
+      "type": "string",
+      "enum": ["logic", "sql", "cypher", "python"],
+      "description": "context and llm concepts use their own single-file forms (*.context.yaml / *.llm.md)."
+    },
+    "outputPredicate": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The concept's output predicate (its lineage node name)."
+    },
+    "group": { "type": "string" },
+    "description": {
+      "type": "string",
+      "description": "Human/agent-readable description (pulled from the server; optional when hand-authoring)."
+    },
+    "annotations": {
+      "type": "object",
+      "description": "Verbatim server annotation columns preserved on pull (bind_annotations, param_annotations, post_annotations, model_annotation, mapping_annotations). The lossless capture apply consumes. Prefer the friendly `binds`/`fields` when hand-authoring.",
+      "additionalProperties": true
+    },
+    "binds": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "type": "array",
+          "description": "External data bound into a predicate. A predicate produced by ANOTHER concept must NOT be bound here — that reference is a derived edge.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["predicate", "datasource"],
+            "properties": {
+              "predicate": { "type": "string", "minLength": 1 },
+              "datasource": {
+                "type": "string",
+                "description": "Name of a datasource file in datasources/, resolved at apply."
+              },
+              "table_name": { "type": "string" }
+            }
+          }
+        },
+        "output": {
+          "type": "array",
+          "description": "Where results are written. Empty/unbound => materialized by the engine.",
+          "items": { "type": "object", "additionalProperties": true }
+        }
+      }
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "type": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

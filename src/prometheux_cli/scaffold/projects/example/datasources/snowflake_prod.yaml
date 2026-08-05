@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=../../../.px/schemas/datasource.schema.json
+$schema: ../../../.px/schemas/datasource.schema.json
+name: snowflake_prod
+type: snowflake
+account: ${SNOWFLAKE_ACCOUNT}   # placeholder — resolved from env at apply, never stored
+warehouse: COMPUTE_WH
+database: PROD
+# no password / key here: secrets are resolved from the environment at apply time

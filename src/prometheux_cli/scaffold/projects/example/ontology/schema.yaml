@@ -1,0 +1,4 @@
+# Ontology schema (entity/edge graph). Kept minimal in the starter; the ontology
+# schema shape is validated by the platform on apply (not by offline `px validate` yet).
+entities: []
+edges: []

@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../../.px/schemas/concept-meta.schema.json
+$schema: ../../../.px/schemas/concept-meta.schema.json
+conceptType: logic
+outputPredicate: customer
+group: ingest
+binds:
+  input:
+    - predicate: source_customers
+      datasource: snowflake_prod   # matches name: in datasources/snowflake_prod.yaml
+      table_name: RAW.CUSTOMERS
+  output: []                       # unbound -> materialized by the engine
+fields:
+  - { name: Id, type: string }
+  - { name: Name, type: string }
+  - { name: Country, type: string }

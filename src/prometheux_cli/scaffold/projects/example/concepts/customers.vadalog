@@ -1,0 +1,4 @@
+% A `logic` concept: native Vadalog (this IS the `rules` column).
+% source_customers is bound to a datasource in customers.meta.yaml, so it is an
+% input edge. The head predicate `customer` is this concept's output.
+customer(Id, Name, Country) :- source_customers(Id, Name, Country).
