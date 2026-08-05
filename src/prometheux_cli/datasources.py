@@ -100,6 +100,8 @@ def database_kwargs(resolved_spec: dict) -> Dict[str, object]:
             options[key] = value
     if options:
         kwargs["options"] = options
+    # The data manager rejects a null port; default to 0 when a spec omits it.
+    kwargs.setdefault("port", 0)
     return kwargs
 
 
@@ -113,6 +115,8 @@ def file_database_kwargs(type_: str, disk_file_path: str, filename: str) -> Dict
     return {
         "database_type": (type_ or "").lower(),
         "host": host,
+        # The data manager rejects a null port; file sources use 0 (matches the UI).
+        "port": 0,
         "database_name": filename,
         "options": {},
     }

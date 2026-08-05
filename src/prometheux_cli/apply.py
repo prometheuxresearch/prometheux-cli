@@ -83,12 +83,26 @@ def structured_binds(bind_column, output_predicate: str) -> Optional[dict]:
     return {"input": input_binds, "output": output_binds}
 
 
+def ensure_output_atom(definition: str, predicate: str, has_output_bind: bool) -> str:
+    """Guarantee a Vadalog concept declares an output atom.
+
+    The save endpoint only reconstructs `@output` when binds are supplied; a
+    definition sent with no output bind and no inline `@output` is stored without
+    an output atom and cannot run ("No output atom specified"). If neither is
+    present, append `@output("<predicate>").`.
+    """
+    if has_output_bind or "@output" in definition or "@qbind" in definition:
+        return definition
+    body = definition.rstrip()
+    sep = "\n" if body else ""
+    return f'{body}{sep}\n@output("{predicate}").\n'
+
+
 def concept_save_kwargs(concept: LocalConcept, *, update: bool) -> Dict[str, object]:
     """Build the keyword arguments for ``px.save_concept`` (minus ontology_id/scope)."""
     meta = concept.meta or {}
     predicate = concept.predicate
     kwargs: Dict[str, object] = {
-        "definition": concept.body,
         "concept_type": concept.concept_type,
         "output_predicate": predicate,
     }
@@ -104,6 +118,12 @@ def concept_save_kwargs(concept: LocalConcept, *, update: bool) -> Dict[str, obj
     binds = structured_binds(bind_column, predicate) if bind_column is not None else None
     if binds:
         kwargs["binds"] = binds
+
+    definition = concept.body
+    if concept.concept_type in {"logic", "sql", "cypher"}:
+        has_output_bind = bool(binds and binds.get("output"))
+        definition = ensure_output_atom(definition, predicate, has_output_bind)
+    kwargs["definition"] = definition
 
     if update:
         kwargs["existing_name"] = predicate

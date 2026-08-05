@@ -5,6 +5,7 @@ from click.testing import CliRunner
 from prometheux_cli import cli as cli_module
 from prometheux_cli.apply import (
     concept_save_kwargs,
+    ensure_output_atom,
     is_default_parquet_output,
     structured_binds,
     topo_order,
@@ -51,6 +52,25 @@ def test_concept_save_kwargs_create_vs_update():
     update = concept_save_kwargs(c, update=True)
     assert update["existing_name"] == "customer"
     assert update["force_overwrite"] is True
+
+
+def test_ensure_output_atom_appends_when_missing():
+    out = ensure_output_atom("risk(X) :- customer(X).", "risk", has_output_bind=False)
+    assert '@output("risk").' in out
+    assert out.startswith("risk(X)")
+
+
+def test_ensure_output_atom_noop_when_bind_or_inline():
+    body = "risk(X) :- customer(X)."
+    assert ensure_output_atom(body, "risk", has_output_bind=True) == body
+    inline = 'risk(X) :- customer(X).\n@output("risk").'
+    assert ensure_output_atom(inline, "risk", has_output_bind=False) == inline
+
+
+def test_concept_save_kwargs_adds_output_atom_for_logic():
+    c = _c("risk", "risk(X) :- customer(X).")
+    kw = concept_save_kwargs(c, update=False)
+    assert '@output("risk").' in kw["definition"]
 
 
 def test_topo_order_deps_first():

@@ -46,8 +46,15 @@ def test_database_kwargs_maps_and_bundles_extras():
     assert kw["database_type"] == "snowflake"
     assert kw["host"] == "acme.snowflake"
     assert kw["database_name"] == "PROD"
+    assert kw["port"] == 443
     assert kw["options"] == {"warehouse": "WH", "account": "acme"}
     assert "name" not in kw and "$schema" not in kw
+
+
+def test_database_kwargs_defaults_port_when_absent():
+    # A null port makes the data manager 400, so it must default to 0.
+    kw = database_kwargs({"type": "postgres", "host": "h", "database": "db"})
+    assert kw["port"] == 0
 
 
 def test_file_database_kwargs():
@@ -55,3 +62,4 @@ def test_file_database_kwargs():
     assert kw["database_type"] == "csv"
     assert kw["host"] == "disk/uploads"
     assert kw["database_name"] == "customers.csv"
+    assert kw["port"] == 0

@@ -32,7 +32,11 @@ Platform (over the `prometheux_chain` SDK):
   - **Local files** (csv/parquet/json/…): add `file: ../data/x.csv` and apply uploads it to
     the workspace disk, then connects it. (Requires the Data Manager service.)
 
-Next: ontology/app apply, OpenLineage emit, richer `context` sync.
+- `px run <concept> [dir]` — run a concept and emit OpenLineage START/COMPLETE/FAIL
+  events (append to `<workspace>/.px/openlineage.jsonl` and/or `--openlineage-url` for a
+  catalog like Marquez). `--project` scopes the lookup; `--no-openlineage` disables emit.
+
+Next: ontology/app apply, richer `context` sync.
 
 ## Connect to a platform
 
@@ -72,6 +76,7 @@ src/prometheux_cli/
   plan.py           # diff engine + downstream cascade (pure functions)
   apply.py          # local concept -> save_concept args (pure functions)
   datasources.py    # secret resolution + connect payloads (pure functions)
+  openlineage.py    # OpenLineage RunEvent builder (pure functions)
   sdk.py            # lazy bridge to prometheux_chain
   credentials.py    # CLI credential store (login)
   parsing.py        # yaml / frontmatter helpers
