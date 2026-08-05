@@ -76,7 +76,7 @@ px validate
 ```
 src/prometheux_cli/
   cli.py            # `px` entry point (click)
-  commands/         # init, validate, login, pull
+  commands/         # init, validate, login, pull, plan, apply, run, context
   validation.py     # offline schema + structural engine
   reshape.py        # export dict -> file tree (pull)
   loader.py         # file tree -> typed model (plan/apply)
