@@ -6,6 +6,7 @@ import click
 
 from . import __version__
 from .commands import apply as apply_cmd
+from .commands import context as context_cmd
 from .commands import init as init_cmd
 from .commands import login as login_cmd
 from .commands import plan as plan_cmd
@@ -32,6 +33,7 @@ cli.add_command(pull_cmd.pull)
 cli.add_command(plan_cmd.plan)
 cli.add_command(apply_cmd.apply)
 cli.add_command(run_cmd.run)
+cli.add_command(context_cmd.context)
 
 
 def main() -> None:

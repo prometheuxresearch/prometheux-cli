@@ -34,7 +34,11 @@ Platform (over the `prometheux_chain` SDK):
 
 - `px run <concept> [dir]` — run a concept and emit OpenLineage START/COMPLETE/FAIL
   events (append to `<workspace>/.px/openlineage.jsonl` and/or `--openlineage-url` for a
-  catalog like Marquez). `--project` scopes the lookup; `--no-openlineage` disables emit.
+  catalog like Marquez). `--project` scopes the lookup; `--persist` materializes outputs;
+  `--no-openlineage` disables emit.
+- `px context apply [dir]` — create the context layer from `*.context.md` manifests:
+  one note per referenced body file (scope/activation/kind from the manifest) plus the
+  declared `relates_to`/… links. Notes are created (not yet upserted).
 
 Next: ontology/app apply, richer `context` sync.
 
@@ -77,6 +81,7 @@ src/prometheux_cli/
   apply.py          # local concept -> save_concept args (pure functions)
   datasources.py    # secret resolution + connect payloads (pure functions)
   openlineage.py    # OpenLineage RunEvent builder (pure functions)
+  context.py        # collect notes+links from *.context.md manifests (pure)
   sdk.py            # lazy bridge to prometheux_chain
   credentials.py    # CLI credential store (login)
   parsing.py        # yaml / frontmatter helpers
