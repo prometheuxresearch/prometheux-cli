@@ -2,11 +2,29 @@ import pytest
 
 from prometheux_cli.datasources import (
     SecretError,
+    bind_template_from_sources,
     database_kwargs,
     file_database_kwargs,
     is_file_based,
     resolve_secrets,
+    rewrite_bind_predicate,
 )
+
+
+def test_rewrite_bind_predicate():
+    t = '@bind("people_csv","csv useHeaders=\'true\'","disk","people.csv").'
+    out = rewrite_bind_predicate(t, "people_raw")
+    assert out == '@bind("people_raw","csv useHeaders=\'true\'","disk","people.csv").'
+
+
+def test_bind_template_from_sources_matches_filename():
+    sources = [
+        {"table_name": "a.csv", "bind_annotation": "@bind(\"a\",...)."},
+        {"table_name": "people.csv", "bind_annotation": "@bind(\"people\",...)."},
+    ]
+    assert bind_template_from_sources(sources, "people.csv") == "@bind(\"people\",...)."
+    assert bind_template_from_sources(sources) == "@bind(\"a\",...)."  # first by default
+    assert bind_template_from_sources([]) is None
 
 
 def test_is_file_based():

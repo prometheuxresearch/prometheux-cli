@@ -12,6 +12,7 @@ import click
 from ..apply import concept_save_kwargs, topo_order
 from ..datasources import (
     SecretError,
+    bind_template_from_sources,
     database_kwargs,
     file_database_kwargs,
     is_file_based,
@@ -125,7 +126,7 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
         except Exception as exc:  # noqa: BLE001 - snapshot is best-effort safety
             click.echo(f"  {click.style('warning', fg='yellow')} snapshot failed: {exc}")
 
-    failed_ds = _apply_datasources(px, project, result)
+    failed_ds, ds_binds = _apply_datasources(px, project, result)
 
     to_write = {c.predicate for c in result.concept_changes if c.action in {"create", "update"}}
     updates = {c.predicate for c in result.concept_changes if c.action == "update"}
@@ -133,7 +134,7 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
 
     applied = 0
     for concept in topo_order([by_pred[p] for p in to_write if p in by_pred]):
-        kwargs = concept_save_kwargs(concept, update=concept.predicate in updates)
+        kwargs = concept_save_kwargs(concept, update=concept.predicate in updates, datasource_binds=ds_binds)
         try:
             px.save_concept(ontology_id=project.id, scope=project.scope, **kwargs)
             verb = "updated" if concept.predicate in updates else "created"
@@ -167,37 +168,44 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
         click.echo(f"  downstream now stale: {', '.join(sorted(stale))} — `px run` to rebuild.")
 
 
-def _apply_datasources(px, project: LocalProject, result: PlanResult) -> List[str]:
+def _apply_datasources(px, project: LocalProject, result: PlanResult):
     """Connect datasources the plan marks as create (upload local files first).
 
     A datasource failure is reported and skipped, not fatal: concepts are the
     core lineage and don't depend on the datasource at save time, so a broken or
-    unreachable connector must not block the whole apply. Returns failed names.
+    unreachable connector must not block the whole apply. Returns
+    ``(failed_names, {datasource_name: bind_annotation_template})`` — the latter
+    lets a concept's binds.input reference the datasource.
     """
     failed: List[str] = []
+    ds_binds: dict = {}
     to_connect = [d.name for d in result.datasource_changes if d.action == "create"]
     for name in to_connect:
         spec = project.datasources.get(name)
         if not spec:
             continue
         type_ = spec.get("type", "")
+        filename = None
         try:
             if is_file_based(type_) and spec.get("file"):
-                kwargs = _upload_and_kwargs(px, project, name, spec)
+                kwargs, filename = _upload_and_kwargs(px, project, name, spec)
                 click.echo(f"  uploaded + connecting file datasource {name}")
             else:
                 resolved = resolve_secrets(spec, os.environ)
                 kwargs = database_kwargs(resolved)
                 click.echo(f"  connecting datasource {name} ({type_})")
             db = px.Database(**kwargs)
-            px.connect_sources(db, scope=project.scope)
+            connected = px.connect_sources(db, scope=project.scope)
+            template = bind_template_from_sources((connected or {}).get("sources"), filename)
+            if template:
+                ds_binds[name] = template
         except (SecretError, Exception) as exc:  # noqa: BLE001 - report and continue
             failed.append(name)
             click.echo(f"  {click.style('warning', fg='yellow')} datasource {name} skipped: {exc}")
-    return failed
+    return failed, ds_binds
 
 
-def _upload_and_kwargs(px, project: LocalProject, name: str, spec: dict) -> dict:
+def _upload_and_kwargs(px, project: LocalProject, name: str, spec: dict):
     ds_file = project.datasource_paths.get(name)
     base = ds_file.parent if ds_file else (project.directory or Path.cwd())
     local = (base / spec["file"]).resolve()
@@ -216,7 +224,7 @@ def _upload_and_kwargs(px, project: LocalProject, name: str, spec: dict) -> dict
         # Fall back to a computed disk path if the response shape differs.
         disk_path = f"disk/{subdir + '/' if subdir else ''}{local.name}"
         filename = local.name
-    return file_database_kwargs(spec["type"], disk_path, filename)
+    return file_database_kwargs(spec["type"], disk_path, filename), filename
 
 
 def _create_project(px, project: LocalProject) -> str:

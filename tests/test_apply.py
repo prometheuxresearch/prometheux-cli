@@ -73,6 +73,21 @@ def test_concept_save_kwargs_adds_output_atom_for_logic():
     assert '@output("risk").' in kw["definition"]
 
 
+def test_concept_save_kwargs_wires_friendly_input_bind():
+    c = _c(
+        "person",
+        "person(Id, Name, Age) :- people_csv(Id, Name, Age).",
+        binds={"input": [{"predicate": "people_csv", "datasource": "people_ds"}]},
+    )
+    ds_binds = {"people_ds": '@bind("people_ds_placeholder","csv useHeaders=\'true\'","disk","people.csv").'}
+    kw = concept_save_kwargs(c, update=False, datasource_binds=ds_binds)
+    inputs = kw["binds"]["input"]
+    assert len(inputs) == 1
+    # predicate rewritten to match the body reference
+    assert inputs[0]["predicate"] == "people_csv"
+    assert '@bind("people_csv","csv useHeaders=\'true\'","disk","people.csv").' == inputs[0]["annotation"]
+
+
 def test_topo_order_deps_first():
     concepts = [
         _c("report", "report(X) :- risk(X)."),
@@ -122,7 +137,14 @@ class _FakePx:
 
     def connect_sources(self, db, scope="user", compute_row_count=False):
         self.connected.append(db)
-        return {"connectionStatus": True, "sources": []}
+        fn = db.get("database_name") or "data.csv"
+        return {
+            "connectionStatus": True,
+            "sources": [{
+                "table_name": fn,
+                "bind_annotation": f'@bind("{fn.split(".")[0]}","csv useHeaders=\'true\'","disk","{fn}").',
+            }],
+        }
 
     def upload_file(self, file_path, path=""):
         self.uploads.append((file_path, path))
@@ -247,6 +269,37 @@ def test_apply_connects_db_and_uploads_csv(tmp_path: Path, monkeypatch):
     assert sf["options"]["account"] == "acme"  # ${SF_ACCOUNT} resolved
     csv = next(db for db in fake.connected if db["database_type"] == "csv")
     assert csv["database_name"] == "cust.csv"
+
+
+def test_apply_wires_concept_to_csv_datasource(tmp_path: Path, monkeypatch):
+    fake = _FakePx(_empty_export())
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+
+    proj = tmp_path / "projects" / "t"
+    (proj / "concepts").mkdir(parents=True)
+    (proj / "datasources").mkdir(parents=True)
+    (proj / "data").mkdir(parents=True)
+    (tmp_path / "context").mkdir()
+    (tmp_path / "prometheux.workspace.yaml").write_text(
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/t\n"
+    )
+    (proj / "prometheux.yaml").write_text(
+        "schemaVersion: 1\nproject:\n  id: abc123\n  name: T\n  scope: user\n"
+        "concepts: ./concepts\ndatasources:\n  - ./datasources/people.yaml\n"
+    )
+    (proj / "datasources" / "people.yaml").write_text("name: people_ds\ntype: csv\nfile: ../data/people.csv\n")
+    (proj / "data" / "people.csv").write_text("id,name\n1,ada\n")
+    (proj / "concepts" / "person.vadalog").write_text("person(Id, Name) :- people_ds(Id, Name).\n")
+    (proj / "concepts" / "person.meta.yaml").write_text(
+        "conceptType: logic\noutputPredicate: person\n"
+        "binds:\n  input:\n    - predicate: people_ds\n      datasource: people_ds\n"
+    )
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    person = next(s for s in fake.saved if s["output_predicate"] == "person")
+    inputs = person["binds"]["input"]
+    assert any(b["predicate"] == "people_ds" and "people.csv" in b["annotation"] for b in inputs)
 
 
 def test_apply_missing_secret_warns_but_concepts_apply(tmp_path: Path, monkeypatch):

@@ -83,6 +83,20 @@ def structured_binds(bind_column, output_predicate: str) -> Optional[dict]:
     return {"input": input_binds, "output": output_binds}
 
 
+def _friendly_input_binds(meta: dict, datasource_binds: Dict[str, str], rewrite) -> List[dict]:
+    """Turn a concept's `binds.input` (predicate + datasource) into input @bind entries."""
+    out: List[dict] = []
+    for entry in (meta.get("binds") or {}).get("input", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        ds = entry.get("datasource")
+        pred = entry.get("predicate")
+        template = datasource_binds.get(ds) if ds else None
+        if template and pred:
+            out.append({"annotation": rewrite(template, pred), "predicate": pred})
+    return out
+
+
 def ensure_output_atom(definition: str, predicate: str, has_output_bind: bool) -> str:
     """Guarantee a Vadalog concept declares an output atom.
 
@@ -98,8 +112,17 @@ def ensure_output_atom(definition: str, predicate: str, has_output_bind: bool) -
     return f'{body}{sep}\n@output("{predicate}").\n'
 
 
-def concept_save_kwargs(concept: LocalConcept, *, update: bool) -> Dict[str, object]:
-    """Build the keyword arguments for ``px.save_concept`` (minus ontology_id/scope)."""
+def concept_save_kwargs(
+    concept: LocalConcept, *, update: bool, datasource_binds: Dict[str, str] = None
+) -> Dict[str, object]:
+    """Build the keyword arguments for ``px.save_concept`` (minus ontology_id/scope).
+
+    ``datasource_binds`` maps a datasource name to its connect-returned ``@bind``
+    template, used to wire a concept's friendly ``binds.input`` (predicate +
+    datasource) into a real input bind so the concept reads that datasource.
+    """
+    from .datasources import rewrite_bind_predicate
+
     meta = concept.meta or {}
     predicate = concept.predicate
     kwargs: Dict[str, object] = {
@@ -116,6 +139,14 @@ def concept_save_kwargs(concept: LocalConcept, *, update: bool) -> Dict[str, obj
 
     bind_column = (meta.get("annotations") or {}).get("bind_annotations")
     binds = structured_binds(bind_column, predicate) if bind_column is not None else None
+
+    # Friendly binds.input referencing a datasource -> a real input @bind.
+    friendly_inputs = _friendly_input_binds(meta, datasource_binds or {}, rewrite_bind_predicate)
+    if friendly_inputs:
+        binds = binds or {"input": [], "output": []}
+        binds.setdefault("input", [])
+        binds["input"].extend(friendly_inputs)
+
     if binds:
         kwargs["binds"] = binds
 
