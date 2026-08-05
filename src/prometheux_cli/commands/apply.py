@@ -70,6 +70,13 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
     jobs = []
     for project in projects:
         export = _export(px, project)
+        if project.id and _project_missing(export):
+            click.echo(
+                f"  {click.style('warning', fg='yellow')} project id {project.id} not found on "
+                f"server — recreating '{project.name}'."
+            )
+            project.id = None
+            export = None
         result = plan_project(project, export)
         _render(result, is_new=project.id is None)
         if result.has_changes or (prune and result.to_delete):
@@ -94,6 +101,16 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
 
     for project, result in jobs:
         _apply_project(px, project, result, prune=prune, snapshot=not no_snapshot)
+
+
+def _project_missing(export) -> bool:
+    """True when an export has no project row — the id no longer exists server-side."""
+    if not export:
+        return True
+    for name, tbl in (export.get("tables") or {}).items():
+        if name.startswith("projects_") and (tbl or {}).get("data"):
+            return False
+    return True
 
 
 def _export(px, project: LocalProject):

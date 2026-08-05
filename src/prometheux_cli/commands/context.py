@@ -67,16 +67,27 @@ def context_apply(path: Path, assume_yes: bool) -> None:
 
     edges = 0
     for link in links:
-        src, dst = ids.get(link.from_key), ids.get(link.to_key)
-        if not src or not dst:
+        src = _endpoint_ref(link.src, ids)
+        dst = _endpoint_ref(link.dst, ids)
+        if src is None or dst is None:
             continue
         try:
             _create_edge(px, src, dst, link.relation)
             edges += 1
+            if link.dst.kind == "concept" or link.src.kind == "concept":
+                click.echo(f"  linked {src[1]} → {dst[1]} ({link.relation})")
         except Exception as exc:  # noqa: BLE001
             click.echo(f"  {click.style('warning', fg='yellow')} link {link.relation} failed: {exc}")
 
     click.echo(click.style("Applied context", fg="green", bold=True) + f": {created} note(s), {edges} link(s).")
+
+
+def _endpoint_ref(endpoint, note_ids):
+    """Return (type, id) for an edge endpoint, or None if a note id is missing."""
+    if endpoint.kind == "concept":
+        return ("concept", endpoint.concept_id)
+    note_id = note_ids.get(endpoint.note_key)
+    return ("note", note_id) if note_id else None
 
 
 def _create_note(px, note):
@@ -93,9 +104,10 @@ def _create_note(px, note):
     return ((resp or {}).get("data") or {}).get("id")
 
 
-def _create_edge(px, src_id, dst_id, relation):
+def _create_edge(px, src, dst, relation):
+    """src/dst are (type, id) tuples where type is 'note' or 'concept'."""
     from prometheux_chain.client.jarvispy_client import JarvisPyClient
     JarvisPyClient._request("POST", "/api/v1/knowledge/context/edges", json={
-        "src_type": "note", "src_id": src_id, "dst_type": "note", "dst_id": dst_id,
+        "src_type": src[0], "src_id": src[1], "dst_type": dst[0], "dst_id": dst[1],
         "relation": relation, "created_by": "user",
     })

@@ -54,6 +54,14 @@ def test_concept_save_kwargs_create_vs_update():
     assert update["force_overwrite"] is True
 
 
+def test_project_missing_detects_deleted_project():
+    from prometheux_cli.commands.apply import _project_missing
+    assert _project_missing(None) is True
+    assert _project_missing({"tables": {}}) is True
+    assert _project_missing({"tables": {"projects_x": {"data": []}}}) is True
+    assert _project_missing({"tables": {"projects_x": {"data": [{"project_id": "x"}]}}}) is False
+
+
 def test_ensure_output_atom_appends_when_missing():
     out = ensure_output_atom("risk(X) :- customer(X).", "risk", has_output_bind=False)
     assert '@output("risk").' in out
@@ -220,6 +228,7 @@ def _empty_export():
         "project_id": "abc123",
         "scope": "user",
         "tables": {
+            "projects_workspace_id": {"schema": [], "data": [{"project_id": "abc123", "name": "T"}]},
             "concepts_abc123": {"schema": [], "data": [], "row_count": 0},
             "datasources_workspace_id": {"schema": [], "data": [], "row_count": 0},
         },

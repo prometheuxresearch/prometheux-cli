@@ -30,9 +30,16 @@ class ContextNote:
 
 
 @dataclass
+class Endpoint:
+    kind: str           # "note" | "concept"
+    note_key: Optional[RefKey] = None   # set when kind == "note"
+    concept_id: Optional[str] = None    # "<project_id>:<predicate>" when kind == "concept"
+
+
+@dataclass
 class ContextLink:
-    from_key: RefKey
-    to_key: RefKey
+    src: Endpoint
+    dst: Endpoint
     relation: str
 
 
@@ -107,9 +114,29 @@ def collect_context(workspace) -> Tuple[List[ContextNote], List[ContextLink], Li
 
         for link in fm.get("links", []) or []:
             frm, to, relation = link.get("from"), link.get("to"), link.get("relation", "relates_to")
-            if frm in key_by_path and to in key_by_path:
-                links.append(ContextLink(key_by_path[frm], key_by_path[to], relation))
-            else:
-                warnings.append(f"{rel}: link references a path not in this set ({frm} -> {to})")
+            src = _endpoint(frm, key_by_path, scope_id)
+            dst = _endpoint(to, key_by_path, scope_id)
+            if src is None or dst is None:
+                warnings.append(f"{rel}: link references an unknown note/concept ({frm} -> {to})")
+                continue
+            links.append(ContextLink(src, dst, relation))
 
     return notes, links, warnings
+
+
+def _endpoint(ref, key_by_path, scope_id) -> Optional[Endpoint]:
+    """Resolve a link endpoint: a body path (note) or `concept:[<project>:]<predicate>`."""
+    if not isinstance(ref, str):
+        return None
+    if ref.startswith("concept:"):
+        rest = ref[len("concept:"):]
+        if ":" in rest:
+            project, predicate = rest.split(":", 1)
+        else:
+            project, predicate = scope_id, rest
+        if not project or not predicate:
+            return None
+        return Endpoint("concept", concept_id=f"{project}:{predicate}")
+    if ref in key_by_path:
+        return Endpoint("note", note_key=key_by_path[ref])
+    return None

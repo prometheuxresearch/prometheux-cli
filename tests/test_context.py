@@ -24,7 +24,8 @@ def _ws(tmp_path: Path):
         "schemaVersion: 1\nproject:\n  id: pid1\n  name: P\n  scope: user\ncontext: ./context\n"
     )
     (proj / "context" / "domain.context.md").write_text(
-        "---\nscope: project\nactivation: always\nkind: rule\nnotes:\n  - policy.md\n---\n"
+        "---\nscope: project\nactivation: always\nkind: rule\nnotes:\n  - policy.md\n"
+        "links:\n  - from: policy.md\n    to: concept:risk\n    relation: describes\n---\n"
     )
     (proj / "context" / "policy.md").write_text("# Policy\nMust do X.\n")
     return tmp_path
@@ -48,9 +49,16 @@ def test_collect_context(tmp_path: Path):
     assert by_path["policy.md"].scope_id == "pid1"
     assert by_path["policy.md"].activation == "always"
 
-    # link between the two global notes
-    assert len(links) == 1
-    assert links[0].relation == "relates_to"
+    # note->note link between the two global notes
+    note_links = [l for l in links if l.src.kind == "note" and l.dst.kind == "note"]
+    assert len(note_links) == 1
+    assert note_links[0].relation == "relates_to"
+
+    # note->concept link (project-scoped) resolves the concept node id
+    concept_links = [l for l in links if l.dst.kind == "concept"]
+    assert len(concept_links) == 1
+    assert concept_links[0].dst.concept_id == "pid1:risk"
+    assert concept_links[0].src.note_key[1] == "policy.md"
 
 
 def test_collect_context_missing_body_warns(tmp_path: Path):
