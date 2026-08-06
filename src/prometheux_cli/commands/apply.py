@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 import click
 
@@ -77,6 +77,7 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
     jobs = []
     for project in projects:
         export = _export(px, project)
+        original_id = project.id  # the manifest id before any recreate (may be from another account)
         if project.id and _project_missing(export):
             click.echo(
                 f"  {click.style('warning', fg='yellow')} project id {project.id} not found on "
@@ -90,13 +91,13 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
                               server_apps=server_apps, server_sources=server_sources)
         _render(result, is_new=project.id is None)
         if result.has_changes or (prune and result.to_delete):
-            jobs.append((project, result))
+            jobs.append((project, result, original_id))
 
     if not jobs:
         click.echo("\nNo changes to apply.")
         return
 
-    if not prune and any(r.to_delete for _, r in jobs):
+    if not prune and any(r.to_delete for _, r, _ in jobs):
         click.echo(
             "\n"
             + click.style("note", fg="yellow")
@@ -109,9 +110,12 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
             click.echo("Aborted. Nothing was changed.")
             sys.exit(1)
 
-    for project, result in jobs:
+    # Shared across projects so an app in one project can reference another whose
+    # id changed (e.g. recreated on a different account).
+    id_remap: Dict[str, str] = {}
+    for project, result, original_id in jobs:
         _apply_project(px, project, result, prune=prune, snapshot=not no_snapshot,
-                       resolve_notes=resolve_notes)
+                       resolve_notes=resolve_notes, original_id=original_id, id_remap=id_remap)
 
 
 def _project_missing(export) -> bool:
@@ -139,7 +143,7 @@ def _export(px, project: LocalProject):
 
 
 def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool, snapshot: bool,
-                   resolve_notes=None) -> None:
+                   resolve_notes=None, original_id=None, id_remap=None) -> None:
     click.echo(f'\nApplying "{project.name}"…')
 
     # Create the project first if it is brand-new, and persist the id to disk.
@@ -147,6 +151,14 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
         project.id = _create_project(px, project)
         _persist_project_id(project)
         click.echo(f"  created project {project.id}")
+
+    # Record how this project's id resolved, so apps (in any project) that embed
+    # the manifest's original id get it rewritten to the actual server id. This
+    # is what makes a project with an app portable across accounts.
+    if id_remap is not None and project.id:
+        if original_id and original_id != project.id:
+            id_remap[original_id] = project.id
+        id_remap.setdefault(project.id, project.id)
 
     if snapshot:
         try:
@@ -193,7 +205,7 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
             )
             sys.exit(1)
 
-    _apply_apps(px, project, result, prune=prune)
+    _apply_apps(px, project, result, prune=prune, id_remap=id_remap)
 
     if prune:
         deletes = [c.predicate for c in result.concept_changes if c.action == "delete"]
@@ -215,7 +227,25 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
         click.echo(f"  downstream now stale: {', '.join(sorted(stale))} — `px run` to rebuild.")
 
 
-def _apply_apps(px, project: LocalProject, result: PlanResult, *, prune: bool) -> None:
+def _remap_app_project_ids(definition: dict, id_remap) -> dict:
+    """Rewrite each page's ``project.id`` through ``id_remap`` (old id -> actual).
+
+    An app authored against one project id (e.g. on another account) embeds that
+    id in every page; without this the server validates the app against a project
+    that doesn't exist here and every concept reference fails.
+    """
+    if not id_remap:
+        return definition
+    for page in definition.get("pages") or []:
+        if not isinstance(page, dict):
+            continue
+        proj = page.get("project")
+        if isinstance(proj, dict) and proj.get("id") in id_remap:
+            proj["id"] = id_remap[proj["id"]]
+    return definition
+
+
+def _apply_apps(px, project: LocalProject, result: PlanResult, *, prune: bool, id_remap=None) -> None:
     """Create/update apps via ``save_app``; delete server-only apps with --prune.
 
     A file without an ``id`` that matched an existing app by name adopts that
@@ -223,13 +253,15 @@ def _apply_apps(px, project: LocalProject, result: PlanResult, *, prune: bool) -
     is written back to the file. A newly created app's assigned id is likewise
     persisted, so the next apply is idempotent.
     """
+    import copy
+
     by_identity = {a.identity: a for a in project.apps}
     for change in result.app_changes:
         if change.action in {"create", "update"}:
             app = by_identity.get(change.identity)
             if app is None:
                 continue
-            definition = dict(app.definition)
+            definition = _remap_app_project_ids(copy.deepcopy(app.definition), id_remap)
             if change.server_id and not definition.get("id"):
                 definition["id"] = change.server_id
             try:
@@ -352,6 +384,10 @@ def _apply_datasources(px, project: LocalProject, result: PlanResult):
             else:
                 resolved = resolve_secrets(spec, os.environ)
                 kwargs = database_kwargs(resolved)
+                # A DB connect returns every source in the group, not just this
+                # one; match the connected source by its (single) table so the
+                # concept binds to the right table instead of sources[0].
+                filename = _single_table(spec)
                 click.echo(f"  connecting datasource {name} ({type_})")
             db = px.Database(**kwargs)
             connected = px.connect_sources(db, scope=project.scope)
@@ -362,6 +398,21 @@ def _apply_datasources(px, project: LocalProject, result: PlanResult):
             failed.append(name)
             click.echo(f"  {click.style('warning', fg='yellow')} datasource {name} skipped: {exc}")
     return failed, ds_binds
+
+
+def _single_table(spec: dict):
+    """Return the datasource's table name when it binds exactly one table.
+
+    Used to match the right source out of a multi-source DB connect. Accepts
+    ``tables`` as a one-element list or a bare string; returns None otherwise
+    (falls back to first-source selection).
+    """
+    t = spec.get("tables")
+    if isinstance(t, str) and t.strip():
+        return t.strip()
+    if isinstance(t, list) and len(t) == 1 and isinstance(t[0], str):
+        return t[0].strip()
+    return None
 
 
 def _upload_and_kwargs(px, project: LocalProject, name: str, spec: dict):

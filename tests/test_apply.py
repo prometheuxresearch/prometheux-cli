@@ -360,6 +360,105 @@ def test_apply_connects_db_and_uploads_csv(tmp_path: Path, monkeypatch):
     assert csv["database_name"] == "cust.csv"
 
 
+def test_remap_app_project_ids():
+    from prometheux_cli.commands.apply import _remap_app_project_ids
+    defn = {"id": "app1", "pages": [
+        {"id": "p1", "project": {"id": "OLD"}},
+        {"id": "p2", "project": {"id": "OTHER"}},
+        {"id": "p3"},  # no project block
+        7,             # non-dict page (defensive)
+    ]}
+    out = _remap_app_project_ids(defn, {"OLD": "NEW"})
+    assert out["pages"][0]["project"]["id"] == "NEW"   # rewritten
+    assert out["pages"][1]["project"]["id"] == "OTHER"  # untouched (not in remap)
+    # no remap -> unchanged
+    assert _remap_app_project_ids({"pages": [{"project": {"id": "X"}}]}, {})["pages"][0]["project"]["id"] == "X"
+
+
+def test_apply_rewrites_app_project_id_on_recreate(tmp_path: Path, monkeypatch):
+    """A recreated project's app has its stale page project.id rewritten to the new id."""
+    # server has no such project id -> triggers recreate; save_app captures the definition
+    fake = _FakePx({"project_id": "STALE", "scope": "user", "tables": {}})  # _project_missing -> True
+    saved_defs = []
+    fake.save_app = lambda ontology_id, app, scope="user": (saved_defs.append(app), {"id": "app-x"})[1]
+    fake.save_ontology = lambda oid, name, scope, description=None: "NEWID"
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+
+    proj = _apps_workspace(tmp_path, "")  # placeholder; overwrite manifest + app below
+    (proj / "prometheux.yaml").write_text(
+        "schemaVersion: 1\nproject:\n  id: STALE\n  name: T\n  scope: user\n"
+        "concepts: ./concepts\napps: ./apps\n"
+    )
+    (proj / "concepts" / "c.vadalog").write_text("c(1).\n")
+    (proj / "concepts" / "c.meta.yaml").write_text("conceptType: logic\noutputPredicate: c\n")
+    (proj / "apps" / "sales.app.yaml").write_text(
+        "schemaVersion: 2\nname: Sales\npages:\n  - id: page_1\n    label: P\n    project:\n      id: STALE\n"
+    )
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert saved_defs, "app was not saved"
+    # the page's project.id was rewritten from the stale id to the recreated id
+    assert saved_defs[0]["pages"][0]["project"]["id"] == "NEWID"
+
+
+def test_single_table_helper():
+    from prometheux_cli.commands.apply import _single_table
+    assert _single_table({"tables": "prometheux.public.companies"}) == "prometheux.public.companies"
+    assert _single_table({"tables": ["schema.t"]}) == "schema.t"
+    assert _single_table({"tables": ["a", "b"]}) is None
+    assert _single_table({}) is None
+
+
+def test_apply_wires_concept_to_postgres_table(tmp_path: Path, monkeypatch):
+    """A DB datasource binds the concept to the matching table, not sources[0]."""
+    fake = _FakePx(_empty_export())
+
+    def connect(db, scope="user", compute_row_count=False):
+        # A real postgres connect returns EVERY source in the group; the wanted
+        # table must be selected by name, not by position.
+        return {"connectionStatus": True, "sources": [
+            {"table_name": "prometheux.public.other",
+             "bind_annotation": '@bind("other","postgresql ...","prometheux","prometheux.public.other").'},
+            {"table_name": "prometheux.public.companies",
+             "bind_annotation": '@bind("companies","postgresql ...","prometheux","prometheux.public.companies").'},
+        ]}
+
+    fake.connect_sources = connect
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+    monkeypatch.setenv("PG_PASSWORD", "secret")
+
+    proj = tmp_path / "projects" / "t"
+    (proj / "concepts").mkdir(parents=True)
+    (proj / "datasources").mkdir(parents=True)
+    (tmp_path / "context").mkdir()
+    (tmp_path / "prometheux.workspace.yaml").write_text(
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/t\n"
+    )
+    (proj / "prometheux.yaml").write_text(
+        "schemaVersion: 1\nproject:\n  id: abc123\n  name: T\n  scope: user\n"
+        "concepts: ./concepts\ndatasources:\n  - ./datasources/pg_companies.yaml\n"
+    )
+    (proj / "datasources" / "pg_companies.yaml").write_text(
+        "name: pg_companies\ntype: postgresql\nhost: db.example\nport: 5432\n"
+        "username: u\npassword: ${PG_PASSWORD}\ndatabase: prometheux\n"
+        "tables:\n  - prometheux.public.companies\n"
+    )
+    (proj / "concepts" / "company.vadalog").write_text("company(Id, Name) :- companies_src(Id, Name).\n")
+    (proj / "concepts" / "company.meta.yaml").write_text(
+        "conceptType: logic\noutputPredicate: company\n"
+        "binds:\n  input:\n    - predicate: companies_src\n      datasource: pg_companies\n"
+    )
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    company = next(s for s in fake.saved if s["output_predicate"] == "company")
+    ann = company["binds"]["input"][0]["annotation"]
+    # bound to the companies table (matched by name), rewritten to the body predicate
+    assert "prometheux.public.companies" in ann
+    assert '@bind("companies_src"' in ann
+
+
 def test_apply_wires_concept_to_csv_datasource(tmp_path: Path, monkeypatch):
     fake = _FakePx(_empty_export())
     monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
