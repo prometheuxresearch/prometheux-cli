@@ -262,21 +262,30 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
         click.echo(f"  downstream now stale: {', '.join(sorted(stale))} — `px run` to rebuild.")
 
 
-def _remap_app_project_ids(definition: dict, id_remap) -> dict:
-    """Rewrite each page's ``project.id`` through ``id_remap`` (old id -> actual).
+def _remap_app_project_ids(definition: dict, id_remap, owning_id=None) -> dict:
+    """Rewrite each page's ``project.id`` so the app points at the right project here.
 
     An app authored against one project id (e.g. on another account) embeds that
-    id in every page; without this the server validates the app against a project
-    that doesn't exist here and every concept reference fails.
+    id in every page; without rewriting, the server validates the app against a
+    project that doesn't exist here and every concept reference fails. Two cases:
+    - the id is in ``id_remap`` (a project applied in this run) -> use the mapping;
+    - the id is stale/foreign (not any project in this run) -> assume it means the
+      app's own project and rewrite to ``owning_id``. This covers a copy where the
+      manifest id was cleared, so no old->new mapping exists.
     """
-    if not id_remap:
-        return definition
+    id_remap = id_remap or {}
+    known = set(id_remap.values())
     for page in definition.get("pages") or []:
         if not isinstance(page, dict):
             continue
         proj = page.get("project")
-        if isinstance(proj, dict) and proj.get("id") in id_remap:
-            proj["id"] = id_remap[proj["id"]]
+        if not isinstance(proj, dict):
+            continue
+        pid = proj.get("id")
+        if pid in id_remap:
+            proj["id"] = id_remap[pid]
+        elif owning_id and pid and pid != owning_id and pid not in known:
+            proj["id"] = owning_id
     return definition
 
 
@@ -296,7 +305,7 @@ def _apply_apps(px, project: LocalProject, result: PlanResult, *, prune: bool, i
             app = by_identity.get(change.identity)
             if app is None:
                 continue
-            definition = _remap_app_project_ids(copy.deepcopy(app.definition), id_remap)
+            definition = _remap_app_project_ids(copy.deepcopy(app.definition), id_remap, project.id)
             if change.server_id and not definition.get("id"):
                 definition["id"] = change.server_id
             try:

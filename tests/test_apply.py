@@ -369,10 +369,25 @@ def test_remap_app_project_ids():
         7,             # non-dict page (defensive)
     ]}
     out = _remap_app_project_ids(defn, {"OLD": "NEW"})
-    assert out["pages"][0]["project"]["id"] == "NEW"   # rewritten
-    assert out["pages"][1]["project"]["id"] == "OTHER"  # untouched (not in remap)
-    # no remap -> unchanged
+    assert out["pages"][0]["project"]["id"] == "NEW"   # rewritten via remap
+    assert out["pages"][1]["project"]["id"] == "OTHER"  # untouched (no owning_id, not in remap)
+    # no remap, no owning -> unchanged
     assert _remap_app_project_ids({"pages": [{"project": {"id": "X"}}]}, {})["pages"][0]["project"]["id"] == "X"
+
+
+def test_remap_app_project_ids_stale_foreign_id_falls_back_to_owning():
+    from prometheux_cli.commands.apply import _remap_app_project_ids
+    # a copy where the manifest id was cleared: the app embeds the SOURCE id, which
+    # isn't in the remap; it should fall back to the owning (new) project id.
+    defn = {"pages": [
+        {"project": {"id": "SOURCE"}},       # stale foreign id -> owning
+        {"project": {"id": "OWNING"}},       # already correct -> untouched
+        {"project": {"id": "SIBLING_NEW"}},  # a real applied project (in remap values) -> untouched
+    ]}
+    out = _remap_app_project_ids(defn, {"SIBLING_OLD": "SIBLING_NEW"}, owning_id="OWNING")
+    assert out["pages"][0]["project"]["id"] == "OWNING"
+    assert out["pages"][1]["project"]["id"] == "OWNING"
+    assert out["pages"][2]["project"]["id"] == "SIBLING_NEW"
 
 
 def test_apply_rewrites_app_project_id_on_recreate(tmp_path: Path, monkeypatch):
