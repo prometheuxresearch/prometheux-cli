@@ -100,6 +100,14 @@ def _normalize_rules(text: str) -> str:
     return (text or "").replace("\r\n", "\n").strip()
 
 
+_RESULTS_NORM_RE = re.compile(r'disk/results/[^/"\'\\]+')
+
+
+def _norm_results_paths(s: str) -> str:
+    """Blank out the project-id in ``disk/results/<id>`` for stable comparison."""
+    return _RESULTS_NORM_RE.sub("disk/results/@", s or "")
+
+
 def _canon(value) -> str:
     if isinstance(value, str):
         try:
@@ -254,7 +262,11 @@ def _classify(concept: LocalConcept, row: dict, note_resolver=None, server_sourc
     binds_changed = False
     local_binds = (concept.meta.get("annotations") or {}).get("bind_annotations")
     if local_binds is not None:
-        binds_changed = _canon(row.get("bind_annotations")) != _canon(local_binds)
+        # Ignore the project-id in `disk/results/<id>` (a sibling-output path that
+        # apply retargets at the current project) so a pulled concept matches its
+        # own project regardless of the source id — keeps re-apply idempotent.
+        binds_changed = (_norm_results_paths(_canon(row.get("bind_annotations")))
+                         != _norm_results_paths(_canon(local_binds)))
 
     if concept.concept_type in {"context", "llm"} and _generative_config_changed(concept, row, note_resolver):
         return ConceptChange(

@@ -200,7 +200,7 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
         progressed = False
         for concept in pending:
             kwargs = concept_save_kwargs(concept, update=concept.predicate in updates,
-                                         datasource_binds=ds_binds)
+                                         datasource_binds=ds_binds, project_id=project.id)
             try:
                 if is_generative(concept):
                     _save_generative_concept(project, concept, kwargs, resolve_notes)

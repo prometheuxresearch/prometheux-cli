@@ -83,6 +83,25 @@ def test_concept_save_kwargs_adds_output_atom_for_logic():
     assert '@output("risk").' in kw["definition"]
 
 
+def test_rewrite_results_project_id():
+    from prometheux_cli.apply import rewrite_results_project_id
+    ann = '@bind("up","parquet","disk/results/OLDID","up").'
+    assert rewrite_results_project_id(ann, "NEWID") == '@bind("up","parquet","disk/results/NEWID","up").'
+    # datasource-file paths (disk/project_...) are NOT touched
+    csv = '@bind("x_csv","csv useHeaders=\'true\'","disk/project_OLDID","x.csv").'
+    assert rewrite_results_project_id(csv, "NEWID") == csv
+
+
+def test_concept_save_kwargs_retargets_sibling_output_path():
+    c = _c("downstream", "downstream(X) :- upstream(X).",
+           annotations={"bind_annotations": {
+               "input": ['@bind("upstream","parquet","disk/results/OLDID","upstream").'],
+               "output": ""}})
+    kw = concept_save_kwargs(c, update=False, project_id="NEWID")
+    assert "disk/results/NEWID" in kw["binds"]["input"][0]["annotation"]
+    assert "OLDID" not in kw["binds"]["input"][0]["annotation"]
+
+
 def test_concept_save_kwargs_sql_source_sent_verbatim():
     c = _c("acme", "SELECT Id FROM customer WHERE Name = 'Acme'", ct="sql")
     kw = concept_save_kwargs(c, update=False)

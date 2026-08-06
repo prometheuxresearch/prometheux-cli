@@ -23,6 +23,22 @@ from typing import Dict, List, Optional
 from .loader import LocalConcept
 
 _BIND_PRED_RE = re.compile(r'@q?bind\(\s*"([^"]+)"')
+# The project-id segment of a concept-output (parquet) results path.
+_RESULTS_RE = re.compile(r'(disk/results/)[^/"\'\\]+')
+
+
+def rewrite_results_project_id(annotation: str, project_id: str) -> str:
+    """Point a ``disk/results/<id>/…`` path at the current project.
+
+    A concept that reads a sibling concept's materialized output carries an input
+    bind like ``@bind("up","parquet","disk/results/<oldid>","up")``. On another
+    project/account that ``<oldid>`` is wrong — the sibling's output lives under
+    the *current* project's results dir — so rewrite the id segment. Only touches
+    ``disk/results/`` (concept outputs), never ``disk/<uploads>`` (datasource files).
+    """
+    if not annotation or not project_id:
+        return annotation
+    return _RESULTS_RE.sub(lambda m: m.group(1) + project_id, annotation)
 
 
 def _predicate_of(annotation: str) -> str:
@@ -113,7 +129,8 @@ def ensure_output_atom(definition: str, predicate: str, has_output_bind: bool) -
 
 
 def concept_save_kwargs(
-    concept: LocalConcept, *, update: bool, datasource_binds: Dict[str, str] = None
+    concept: LocalConcept, *, update: bool, datasource_binds: Dict[str, str] = None,
+    project_id: str = None
 ) -> Dict[str, object]:
     """Build the keyword arguments for ``px.save_concept`` (minus ontology_id/scope).
 
@@ -146,6 +163,12 @@ def concept_save_kwargs(
         binds = binds or {"input": [], "output": []}
         binds.setdefault("input", [])
         binds["input"].extend(friendly_inputs)
+
+    if binds and project_id:
+        # Retarget sibling-output (parquet) input paths at the current project.
+        for entry in binds.get("input") or []:
+            if isinstance(entry, dict) and isinstance(entry.get("annotation"), str):
+                entry["annotation"] = rewrite_results_project_id(entry["annotation"], project_id)
 
     if binds:
         kwargs["binds"] = binds
