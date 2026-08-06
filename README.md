@@ -36,6 +36,10 @@ Platform (over the `prometheux_chain` SDK):
   events (append to `<workspace>/.px/openlineage.jsonl` and/or `--openlineage-url` for a
   catalog like Marquez). `--project` scopes the lookup; `--persist` materializes outputs;
   `--no-openlineage` disables emit.
+- `px status [--watch]` — one row per ontology with its current/latest run state
+  (running / success / error / cancelled / idle), the concept executing and its progress.
+  `--watch` refreshes in place and announces when a run starts; `--scope` / `--interval`
+  tune it. No workspace needed — monitors the whole account you're logged into.
 - `px context apply [dir]` — apply the context layer from `*.context.md` manifests:
   one note per referenced body file (scope/activation/kind), plus links
   (`relates_to`/`defines`/… note↔note or note→`concept:<predicate>`). **Idempotent** —

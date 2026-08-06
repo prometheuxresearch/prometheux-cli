@@ -12,6 +12,7 @@ from .commands import login as login_cmd
 from .commands import plan as plan_cmd
 from .commands import pull as pull_cmd
 from .commands import run as run_cmd
+from .commands import status as status_cmd
 from .commands import validate as validate_cmd
 
 
@@ -21,8 +22,9 @@ def cli() -> None:
     """px — Prometheux as code.
 
     Author a workspace (lineage + context) as files, then plan and apply it.
-    `init` and `validate` run fully offline; `login`, `pull`, `plan`, and
-    `apply` reach the platform.
+    `init` and `validate` run fully offline; `login`, `pull`, `plan`, `apply`,
+    `run`, and `status` reach the platform. `status --watch` live-monitors each
+    ontology's run state.
     """
 
 
@@ -33,6 +35,7 @@ cli.add_command(pull_cmd.pull)
 cli.add_command(plan_cmd.plan)
 cli.add_command(apply_cmd.apply)
 cli.add_command(run_cmd.run)
+cli.add_command(status_cmd.status)
 cli.add_command(context_cmd.context)
 
 
