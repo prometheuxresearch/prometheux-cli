@@ -125,6 +125,35 @@ def test_datasource_reused_via_pulled_table_name():
     assert ch.action == "unchanged" and ch.bind
 
 
+def test_file_datasource_reused_when_already_uploaded():
+    # a file datasource whose content is already on the account (matched by
+    # disk/<diskPath> + filename) is reused, not re-uploaded
+    server = [{"datasource_type": "csv", "host": "disk/project_x", "port": "",
+               "table_name": "save_event.csv",
+               "bind_annotation": '@bind("save_event_csv","csv useHeaders=\'true\'","disk/project_x","save_event.csv").'}]
+    local = _local_ds({"save_event": {"type": "csv", "file": "../files/save_event.csv",
+                                      "diskPath": "project_x"}})
+    result = plan_project(local, None, server_datasources=server)
+    assert result.datasource_changes[0].action == "unchanged"
+    assert not result.has_changes
+
+
+def test_file_datasource_reupload_forced_with_files():
+    server = [{"datasource_type": "csv", "host": "disk/project_x", "port": "",
+               "table_name": "save_event.csv", "bind_annotation": "@bind(...)."}]
+    local = _local_ds({"save_event": {"type": "csv", "file": "../files/save_event.csv",
+                                      "diskPath": "project_x"}})
+    result = plan_project(local, None, server_datasources=server, with_files=True)
+    assert result.datasource_changes[0].action == "create"  # forced re-upload
+
+
+def test_file_datasource_new_always_uploads():
+    local = _local_ds({"save_event": {"type": "csv", "file": "../files/save_event.csv",
+                                      "diskPath": "project_x"}})
+    result = plan_project(local, None, server_datasources=[])
+    assert result.datasource_changes[0].action == "create"  # not on the account yet
+
+
 def test_datasource_port_normalization_matches():
     # local port 0 / server port '' should be treated as equal (e.g. S3 csv)
     server = [{"datasource_type": "csv", "host": "s3a://b/airports", "port": "",

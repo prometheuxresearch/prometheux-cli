@@ -19,7 +19,10 @@ from ..sdk import SdkError, connected_sdk
 @click.option("--scope", default="user", type=click.Choice(["user", "organization"]))
 @click.option("--out", "out", default=".", type=click.Path(path_type=Path), help="Workspace directory.")
 @click.option("--slug", default=None, help="Directory name under projects/ (default: from project name).")
-def pull(project: str, scope: str, out: Path, slug: str) -> None:
+@click.option("--with-files", "with_files", is_flag=True,
+              help="Download uploaded file-datasource content into files/ and write file: "
+                   "specs, so the project (with its files) can be re-applied elsewhere.")
+def pull(project: str, scope: str, out: Path, slug: str, with_files: bool) -> None:
     """Pull PROJECT (a server project id) into ./projects/<slug>.
 
     With no PROJECT, lists the projects visible to you and exits.
@@ -55,6 +58,7 @@ def pull(project: str, scope: str, out: Path, slug: str) -> None:
         target.write_text(f.content, "utf-8")
 
     app_count = _write_apps(px, project, scope, dest, slug)
+    file_count = _download_datasource_files(px, dest, slug) if with_files else 0
 
     _ensure_workspace(dest, slug)
     _ensure_schemas(dest)
@@ -62,11 +66,52 @@ def pull(project: str, scope: str, out: Path, slug: str) -> None:
     for w in result.warnings:
         click.echo(f"{click.style('warning', fg='yellow')}  {w}")
     app_note = f" + {app_count} app(s)" if app_count else ""
+    dl_note = f" + {file_count} datasource file(s)" if file_count else ""
     click.echo(
         click.style("Pulled", fg="green", bold=True)
-        + f" '{name}' ({project}) to {dest / 'projects' / slug} — {len(result.files)} file(s){app_note}."
+        + f" '{name}' ({project}) to {dest / 'projects' / slug} — {len(result.files)} file(s){app_note}{dl_note}."
     )
     click.echo("Next: `px validate`")
+
+
+def _download_datasource_files(px, dest: Path, slug: str) -> int:
+    """Download each uploaded (disk) datasource's content and rewrite its spec.
+
+    A pulled datasource whose host is under ``disk/…`` is server-side uploaded
+    content. Download the file into ``files/`` and rewrite the spec to a `file:`
+    form with ``diskPath`` = the original subdir, so `px apply` re-uploads it to
+    the same location the concept binds hardcode — making the project portable.
+    """
+    import yaml
+
+    ds_dir = dest / "projects" / slug / "datasources"
+    files_dir = dest / "projects" / slug / "files"
+    if not ds_dir.is_dir():
+        return 0
+    count = 0
+    for dsf in sorted(ds_dir.glob("*.yaml")):
+        spec = yaml.safe_load(dsf.read_text("utf-8")) or {}
+        host = str(spec.get("host") or "")
+        table = spec.get("table_name")
+        if not table or not host.startswith("disk"):
+            continue  # not an uploaded-file datasource
+        subdir = host[len("disk"):].lstrip("/")   # e.g. "project_212b77ea132" or ""
+        remote = f"{subdir}/{table}" if subdir else table
+        files_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            px.download_file(remote, dest_path=str(files_dir / table))
+        except Exception as exc:  # noqa: BLE001 - report and skip
+            click.echo(f"{click.style('warning', fg='yellow')}  could not download {remote}: {exc}")
+            continue
+        new_spec = {"$schema": spec.get("$schema"), "name": spec.get("name"),
+                    "type": spec.get("type"), "file": f"../files/{table}"}
+        if subdir:
+            new_spec["diskPath"] = subdir
+        dsf.write_text(
+            yaml.safe_dump({k: v for k, v in new_spec.items() if v is not None},
+                           sort_keys=False, allow_unicode=True), "utf-8")
+        count += 1
+    return count
 
 
 def _write_apps(px, project: str, scope: str, dest: Path, slug: str) -> int:

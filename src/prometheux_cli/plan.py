@@ -144,7 +144,8 @@ def _transitive_downstream(start: str, dependents: Dict[str, Set[str]]) -> List[
 
 
 def plan_project(local: LocalProject, export: Optional[dict], note_resolver=None,
-                 server_apps=None, server_sources=None, server_datasources=None) -> PlanResult:
+                 server_apps=None, server_sources=None, server_datasources=None,
+                 with_files: bool = False) -> PlanResult:
     """Diff a local project against its server export (None => brand-new project).
 
     ``note_resolver`` (path -> [note id]) lets a static context concept's pinned
@@ -196,7 +197,7 @@ def plan_project(local: LocalProject, export: Optional[dict], note_resolver=None
             result.cascade[pred] = downstream
     result.populated = populated
 
-    _diff_datasources(local, export, server_datasources, result)
+    _diff_datasources(local, export, server_datasources, result, with_files=with_files)
     _diff_ontology(local, export, result)
     _diff_apps(local, server_apps, result)
     return result
@@ -318,7 +319,22 @@ def _ds_key(type_, host, port, table):
     return (str(type_ or "").lower(), str(host or ""), _ds_port(port), str(table or ""))
 
 
-def _diff_datasources(local: LocalProject, export, server_datasources, result: PlanResult) -> None:
+def _file_ds_key(spec: dict):
+    """Connection identity a `file:` datasource *would* have once uploaded.
+
+    An uploaded file connects with host = ``disk/<diskPath>`` (or ``disk`` when no
+    subdir) and table = the file name — matching how the server records it. Lets a
+    pulled `file:` datasource match the copy it was uploaded from and be reused.
+    """
+    from pathlib import PurePosixPath
+    fname = PurePosixPath(str(spec.get("file") or "")).name or str(spec.get("table_name") or "")
+    subdir = str(spec.get("diskPath") or "").strip("/")
+    host = f"disk/{subdir}" if subdir else "disk"
+    return _ds_key(spec.get("type"), host, "", fname)
+
+
+def _diff_datasources(local: LocalProject, export, server_datasources, result: PlanResult,
+                      with_files: bool = False) -> None:
     """Classify each local datasource create / unchanged, avoiding needless re-connects.
 
     Two ways to recognize a datasource that already exists:
@@ -339,7 +355,15 @@ def _diff_datasources(local: LocalProject, export, server_datasources, result: P
                     if r.get("datasource_id")}
 
     for name, spec in local.datasources.items():
-        table = None if spec.get("file") else _ds_table(spec)
+        if spec.get("file"):
+            # Upload only if not already on the account; `--with-files` forces a refresh.
+            bind = server_by_key.get(_file_ds_key(spec))
+            if bind and not with_files:
+                result.datasource_changes.append(DatasourceChange(name, "unchanged", bind=bind))
+            else:
+                result.datasource_changes.append(DatasourceChange(name, "create"))
+            continue
+        table = _ds_table(spec)
         key = _ds_key(spec.get("type"), spec.get("host"), spec.get("port"), table)
         bind = server_by_key.get(key) if table else None
         if bind:

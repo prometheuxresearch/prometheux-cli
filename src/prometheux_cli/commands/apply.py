@@ -44,13 +44,18 @@ from .plan import _render
 @click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
 @click.option("--prune", is_flag=True, help="Also delete concepts present on the server but not in files.")
 @click.option("--no-snapshot", is_flag=True, help="Do not snapshot each project before applying.")
-def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snapshot: bool) -> None:
+@click.option("--with-files", "with_files", is_flag=True,
+              help="Re-upload file datasources even when an identical one already exists "
+                   "on the account (refresh content). New files always upload.")
+def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snapshot: bool,
+          with_files: bool) -> None:
     """Apply the workspace to the platform.
 
     Shows the same diff as `px plan`, then (after confirmation) creates/updates
     concepts. Deletions happen only with --prune. Each changed project is
     snapshotted first so an apply is recoverable. Use --project to target a
-    subset instead of the whole workspace.
+    subset instead of the whole workspace. A file datasource that already exists
+    on the account is reused (not re-uploaded) unless --with-files is given.
     """
     start = path or Path.cwd()
     root = find_workspace_root(start)
@@ -96,7 +101,7 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
         server_datasources = fetch_server_datasources(px, project.scope)
         result = plan_project(project, export, note_resolver=resolve_notes,
                               server_apps=server_apps, server_sources=server_sources,
-                              server_datasources=server_datasources)
+                              server_datasources=server_datasources, with_files=with_files)
         _render(result, is_new=project.id is None)
         if result.has_changes or (prune and result.to_delete):
             jobs.append((project, result, original_id))
