@@ -56,6 +56,48 @@ def test_reshape_sql_warns_when_source_missing():
     assert any("source could not be recovered" in w for w in result.warnings)
 
 
+def _generative_export(concept_row):
+    pid = "p1"
+    return {"project_id": pid, "scope": "user", "tables": {
+        "projects_workspace_id": {"data": [{"project_id": pid, "name": "P"}]},
+        f"concepts_{pid}": {"data": [concept_row]},
+    }}
+
+
+def test_reshape_llm_captures_llmconfig():
+    row = {
+        "predicate_name": "summary", "concept_type": "llm",
+        "rules": "Summarize {{ customer }}.",
+        "concept_config": {"output_columns": [{"name": "Id", "type": "string"}],
+                           "provider": None, "model": None, "temperature": None},
+    }
+    result = reshape_project(_generative_export(row), "n", "s")
+    files = {f.path: f.content for f in result.files}
+    md = files["projects/s/concepts/summary.llm.md"]
+    assert "Summarize {{ customer }}." in md
+    fm = yaml.safe_load(md.split("---")[1])
+    assert fm["conceptType"] == "llm"
+    assert fm["llmConfig"]["output_columns"][0]["name"] == "Id"
+    assert "provider" not in fm["llmConfig"]  # null fields dropped
+
+
+def test_reshape_context_dynamic_captures_query():
+    row = {"predicate_name": "policy", "concept_type": "context",
+           "concept_config": {"mode": "dynamic", "query": "risk policy", "top_k": 5, "kinds": None}}
+    result = reshape_project(_generative_export(row), "n", "s")
+    doc = yaml.safe_load({f.path: f.content for f in result.files}["projects/s/concepts/policy.context.yaml"])
+    assert doc == {"conceptType": "context", "outputPredicate": "policy",
+                   "contextMode": "dynamic", "query": "risk policy", "top_k": 5}
+
+
+def test_reshape_context_static_captures_note_ids():
+    row = {"predicate_name": "pinned", "concept_type": "context",
+           "concept_config": {"mode": "static", "note_ids": ["n1", "n2"]}}
+    result = reshape_project(_generative_export(row), "n", "s")
+    doc = yaml.safe_load({f.path: f.content for f in result.files}["projects/s/concepts/pinned.context.yaml"])
+    assert doc["contextMode"] == "static" and doc["noteIds"] == ["n1", "n2"]
+
+
 def test_reshape_meta_fields_and_annotations(export_dict):
     result = reshape_project(export_dict, "n", "s")
     meta = yaml.safe_load(

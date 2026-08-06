@@ -13,18 +13,32 @@
     "contextMode": { "type": "string", "enum": ["static", "dynamic"] },
     "notes": {
       "type": "array",
-      "description": "static only — paths into this project's context vault (ADR 0006: project scope).",
+      "description": "static only — paths into this project's context vault (ADR 0006: project scope). Resolved to note ids at apply.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "noteIds": {
+      "type": "array",
+      "description": "static only — server note ids, an alternative to `notes` that skips path resolution (what `pull` emits, since ids have no reverse path mapping).",
       "items": { "type": "string", "minLength": 1 }
     },
     "query": {
       "type": "string",
       "description": "dynamic only — retrieval query over the project vault."
+    },
+    "top_k": {
+      "type": "integer",
+      "description": "dynamic only — max notes retrieved per run."
+    },
+    "kinds": {
+      "type": "array",
+      "description": "dynamic only — restrict retrieval to these note kinds.",
+      "items": { "type": "string" }
     }
   },
   "allOf": [
     {
       "if": { "properties": { "contextMode": { "const": "static" } } },
-      "then": { "required": ["notes"] }
+      "then": { "anyOf": [ { "required": ["notes"] }, { "required": ["noteIds"] } ] }
     },
     {
       "if": { "properties": { "contextMode": { "const": "dynamic" } } },

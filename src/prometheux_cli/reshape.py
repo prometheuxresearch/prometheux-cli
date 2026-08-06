@@ -95,6 +95,19 @@ def _maybe_json(value):
     return value
 
 
+def _clean_config(raw) -> dict:
+    """Parse a ``concept_config`` column and drop null-valued keys.
+
+    The server materializes every optional field as ``null`` (llm provider/model,
+    dynamic-context top_k/kinds); dropping them keeps the pulled file lean and
+    makes it compare equal to a hand-authored one.
+    """
+    cfg = _maybe_json(raw)
+    if not isinstance(cfg, dict):
+        return {}
+    return {k: v for k, v in cfg.items() if v is not None}
+
+
 def _fields_to_list(raw) -> List[dict]:
     """Server ``fields`` is a name->type dict; emit an ordered [{name,type}] list."""
     parsed = _maybe_json(raw)
@@ -200,15 +213,33 @@ def _reshape_concept(row: dict, base: str, result: ReshapeResult, yaml, sources:
     elif ctype == "llm":
         fm = {"conceptType": "llm", "outputPredicate": predicate}
         _copy_if(fm, "group", row.get("concept_group"))
-        result.add(
-            f"{base}/concepts/{predicate}.llm.md",
-            _frontmatter(yaml, fm, rules),
-        )
-        result.warn(f"concept '{predicate}' is llm: pulled with limited fidelity.")
+        llm_config = _clean_config(row.get("concept_config"))
+        if llm_config:
+            fm["llmConfig"] = llm_config
+        # body is the prompt template, stored verbatim in `rules`.
+        result.add(f"{base}/concepts/{predicate}.llm.md", _frontmatter(yaml, fm, rules))
     elif ctype == "context":
-        doc = {"conceptType": "context", "outputPredicate": predicate, "contextMode": "dynamic"}
+        cfg = _clean_config(row.get("concept_config"))
+        mode = (cfg.get("mode") or "static").strip().lower()
+        doc = {"conceptType": "context", "outputPredicate": predicate, "contextMode": mode}
+        if mode == "dynamic":
+            doc["query"] = cfg.get("query") or ""
+            if cfg.get("top_k") is not None:
+                doc["top_k"] = cfg["top_k"]
+            if cfg.get("kinds"):
+                doc["kinds"] = cfg["kinds"]
+        else:
+            # Static pins are stored as opaque note ids; there is no reverse
+            # path mapping on pull, so emit `noteIds` (apply consumes these
+            # directly, skipping path resolution).
+            note_ids = cfg.get("note_ids") or []
+            doc["noteIds"] = list(note_ids)
+            if note_ids:
+                result.warn(
+                    f"concept '{predicate}': static context pinned by note id; edit to "
+                    f"`notes:` body paths if you want git-tracked note bodies."
+                )
         result.add(f"{base}/concepts/{predicate}.context.yaml", _yaml(yaml, doc))
-        result.warn(f"concept '{predicate}' is context: pulled with limited fidelity.")
     else:
         result.warn(f"concept '{predicate}' has unknown type '{ctype}'; skipped.")
 
