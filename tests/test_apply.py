@@ -6,7 +6,9 @@ from prometheux_cli import cli as cli_module
 from prometheux_cli.apply import (
     concept_save_kwargs,
     ensure_output_atom,
+    generative_concept_config,
     is_default_parquet_output,
+    is_generative,
     structured_binds,
     topo_order,
 )
@@ -81,6 +83,16 @@ def test_concept_save_kwargs_adds_output_atom_for_logic():
     assert '@output("risk").' in kw["definition"]
 
 
+def test_concept_save_kwargs_sql_source_sent_verbatim():
+    c = _c("acme", "SELECT Id FROM customer WHERE Name = 'Acme'", ct="sql")
+    kw = concept_save_kwargs(c, update=False)
+    # sql source is the transpile input: no @output atom is appended
+    assert kw["definition"] == "SELECT Id FROM customer WHERE Name = 'Acme'"
+    assert "@output" not in kw["definition"]
+    assert kw["concept_type"] == "sql"
+    assert kw["concept_name"] == "acme"
+
+
 def test_concept_save_kwargs_wires_friendly_input_bind():
     c = _c(
         "person",
@@ -94,6 +106,48 @@ def test_concept_save_kwargs_wires_friendly_input_bind():
     # predicate rewritten to match the body reference
     assert inputs[0]["predicate"] == "people_csv"
     assert '@bind("people_csv","csv useHeaders=\'true\'","disk","people.csv").' == inputs[0]["annotation"]
+
+
+# ---- unit: context / llm concept_config ----------------------------------
+
+def test_is_generative():
+    assert is_generative(_c("s", "", ct="context"))
+    assert is_generative(_c("s", "prompt", ct="llm"))
+    assert not is_generative(_c("s", "s(1).", ct="logic"))
+
+
+def test_generative_config_llm_passthrough():
+    c = _c("summary", "Summarize {{ customer }}.", ct="llm",
+           llmConfig={"provider": "anthropic", "model": "claude-sonnet-4-6",
+                      "output_columns": [{"name": "Id", "type": "string"}]})
+    cfg = generative_concept_config(c)
+    assert cfg["provider"] == "anthropic"
+    assert cfg["output_columns"][0]["name"] == "Id"
+
+
+def test_generative_config_context_dynamic():
+    c = _c("policy", "", ct="context", contextMode="dynamic",
+           query="credit-risk scoring policy", top_k=5, kinds=["fact"])
+    cfg = generative_concept_config(c)
+    assert cfg == {"mode": "dynamic", "query": "credit-risk scoring policy",
+                   "top_k": 5, "kinds": ["fact"]}
+
+
+def test_generative_config_context_static_uses_resolved_ids():
+    c = _c("policy", "", ct="context", contextMode="static",
+           notes=["facts/a.md", "facts/b.md"])
+    cfg = generative_concept_config(c, note_ids=["n1", "n2"])
+    assert cfg == {"mode": "static", "note_ids": ["n1", "n2"]}
+
+
+def test_generative_config_context_static_explicit_ids_override():
+    c = _c("policy", "", ct="context", contextMode="static", noteIds=["direct1"])
+    cfg = generative_concept_config(c, note_ids=["ignored"])
+    assert cfg == {"mode": "static", "note_ids": ["direct1"]}
+
+
+def test_generative_config_none_for_logic():
+    assert generative_concept_config(_c("s", "s(1).", ct="logic")) is None
 
 
 def test_topo_order_deps_first():
@@ -120,6 +174,10 @@ class _FakePx:
         self.connected = []
         self.uploads = []
         self.dirs = []
+        self.ontologies_saved = []
+        self.apps_saved = []
+        self.apps_deleted = []
+        self.server_apps = []  # [{id, name, definition}]
 
     def list_ontologies(self, scopes):
         return [{"id": "abc123", "name": "Al Dente Supply Chain"}]
@@ -138,6 +196,28 @@ class _FakePx:
     def cleanup_concepts(self, ontology_id, scope, names):
         self.pruned = names
         return {}
+
+    def save_ontology_schema(self, ontology_id, ontology_schema_data, scope="user"):
+        self.ontologies_saved.append((ontology_id, ontology_schema_data, scope))
+        return {}
+
+    # apps surface
+    def list_apps(self, ontology_id, scope="user"):
+        return [{"id": a["id"], "name": a["name"]} for a in self.server_apps]
+
+    def get_app(self, ontology_id, app_id, scope="user"):
+        for a in self.server_apps:
+            if a["id"] == app_id:
+                return {"id": a["id"], "name": a["name"], "definition": a["definition"]}
+        return {}
+
+    def save_app(self, ontology_id, app, scope="user"):
+        self.apps_saved.append((ontology_id, app, scope))
+        return {"id": app.get("id") or "app-new-id"}
+
+    def delete_app(self, ontology_id, app_id, scope="user"):
+        self.apps_deleted.append((ontology_id, app_id, scope))
+        return {"status": "success"}
 
     # datasource surface
     def Database(self, **kwargs):
@@ -365,6 +445,181 @@ def test_apply_unknown_project_fails(tmp_path: Path, monkeypatch):
     assert fake.saved == []
 
 
+def _capture_requests(monkeypatch):
+    """Patch JarvisPyClient._request to record (method, path, json) and succeed."""
+    calls = []
+
+    def fake_request(method, path, json=None, params=None):
+        calls.append((method, path, json))
+        return {"status": "success", "data": {"id": (json or {}).get("concept_name")}}
+
+    from prometheux_chain.client.jarvispy_client import JarvisPyClient
+    monkeypatch.setattr(JarvisPyClient, "_request", staticmethod(fake_request))
+    return calls
+
+
+def _generative_workspace(tmp_path: Path):
+    proj = tmp_path / "projects" / "t"
+    (proj / "concepts").mkdir(parents=True)
+    (tmp_path / "context").mkdir()
+    (tmp_path / "prometheux.workspace.yaml").write_text(
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/t\n"
+    )
+    (proj / "prometheux.yaml").write_text(
+        "schemaVersion: 1\nproject:\n  id: abc123\n  name: T\n  scope: user\nconcepts: ./concepts\n"
+    )
+    return proj
+
+
+def test_apply_wires_llm_and_dynamic_context(tmp_path: Path, monkeypatch):
+    fake = _FakePx(_empty_export())
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+    calls = _capture_requests(monkeypatch)
+    proj = _generative_workspace(tmp_path)
+
+    (proj / "concepts" / "summary.llm.md").write_text(
+        "---\nconceptType: llm\noutputPredicate: summary\n"
+        "llmConfig:\n  provider: anthropic\n  model: claude-sonnet-4-6\n---\n"
+        "Summarize {{ customer }}.\n"
+    )
+    (proj / "concepts" / "policy.context.yaml").write_text(
+        "conceptType: context\noutputPredicate: policy\ncontextMode: dynamic\n"
+        "query: credit-risk scoring policy\n"
+    )
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+
+    saves = {c[2]["concept_name"]: c[2] for c in calls if c[1].endswith("/save")}
+    assert saves["summary"]["concept_type"] == "llm"
+    assert saves["summary"]["concept_config"]["provider"] == "anthropic"
+    assert "Summarize" in saves["summary"]["definition"]
+    assert saves["policy"]["concept_type"] == "context"
+    assert saves["policy"]["concept_config"] == {"mode": "dynamic", "query": "credit-risk scoring policy"}
+    # generative concepts never go through the SDK save_concept path
+    assert fake.saved == []
+
+
+def test_apply_static_context_resolves_notes_from_state(tmp_path: Path, monkeypatch):
+    import json as _json
+
+    fake = _FakePx(_empty_export())
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+    calls = _capture_requests(monkeypatch)
+    proj = _generative_workspace(tmp_path)
+
+    (tmp_path / ".px").mkdir()
+    (tmp_path / ".px" / "context-state.json").write_text(_json.dumps({
+        "context/domain.context.md::facts/a.md": {"id": "note-a", "hash": "h1"},
+        "context/domain.context.md::facts/b.md": {"id": "note-b", "hash": "h2"},
+    }))
+    (proj / "concepts" / "pinned.context.yaml").write_text(
+        "conceptType: context\noutputPredicate: pinned\ncontextMode: static\n"
+        "notes:\n  - facts/a.md\n  - facts/b.md\n"
+    )
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    saves = {c[2]["concept_name"]: c[2] for c in calls if c[1].endswith("/save")}
+    assert saves["pinned"]["concept_config"] == {"mode": "static", "note_ids": ["note-a", "note-b"]}
+
+
+def test_apply_static_context_warns_on_unresolved_note(tmp_path: Path, monkeypatch):
+    fake = _FakePx(_empty_export())
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+    calls = _capture_requests(monkeypatch)
+    proj = _generative_workspace(tmp_path)
+
+    # no context-state -> the referenced note cannot resolve
+    (proj / "concepts" / "pinned.context.yaml").write_text(
+        "conceptType: context\noutputPredicate: pinned\ncontextMode: static\n"
+        "notes:\n  - facts/missing.md\n"
+    )
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "not found in context-state" in result.output
+    saves = {c[2]["concept_name"]: c[2] for c in calls if c[1].endswith("/save")}
+    assert saves["pinned"]["concept_config"] == {"mode": "static", "note_ids": []}
+
+
+def _apps_workspace(tmp_path: Path, app_yaml: str):
+    proj = tmp_path / "projects" / "t"
+    (proj / "concepts").mkdir(parents=True)
+    (proj / "apps").mkdir(parents=True)
+    (tmp_path / "context").mkdir()
+    (tmp_path / "prometheux.workspace.yaml").write_text(
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/t\n"
+    )
+    (proj / "prometheux.yaml").write_text(
+        "schemaVersion: 1\nproject:\n  id: abc123\n  name: T\n  scope: user\n"
+        "concepts: ./concepts\napps: ./apps\n"
+    )
+    (proj / "apps" / "sales.app.yaml").write_text(app_yaml)
+    return proj
+
+
+def test_apply_creates_app_and_persists_id(tmp_path: Path, monkeypatch):
+    fake = _FakePx(_empty_export())  # no server apps
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+    proj = _apps_workspace(tmp_path, "schemaVersion: 2\nname: Sales\npages: []\n")
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert len(fake.apps_saved) == 1
+    _, saved_def, _ = fake.apps_saved[0]
+    assert saved_def["name"] == "Sales"
+    # the assigned id is written back into the file for idempotent re-apply
+    import yaml
+    on_disk = yaml.safe_load((proj / "apps" / "sales.app.yaml").read_text())
+    assert on_disk["id"] == "app-new-id"
+
+
+def test_apply_updates_existing_app_by_id(tmp_path: Path, monkeypatch):
+    fake = _FakePx(_empty_export())
+    fake.server_apps = [{"id": "a1", "name": "Sales", "definition": {"id": "a1", "name": "Sales", "pages": [1]}}]
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+    _apps_workspace(tmp_path, "id: a1\nschemaVersion: 2\nname: Sales\npages:\n  - 2\n")
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert len(fake.apps_saved) == 1
+    _, saved_def, _ = fake.apps_saved[0]
+    assert saved_def["id"] == "a1" and saved_def["pages"] == [2]
+
+
+def test_apply_skips_unchanged_app(tmp_path: Path, monkeypatch):
+    fake = _FakePx(_empty_export())
+    fake.server_apps = [{"id": "a1", "name": "Sales",
+                         "definition": {"id": "a1", "schemaVersion": 2, "name": "Sales", "pages": [1]}}]
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+    _apps_workspace(tmp_path, "id: a1\nschemaVersion: 2\nname: Sales\npages:\n  - 1\n")
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert fake.apps_saved == []  # identical definition -> not re-saved
+
+
+def test_apply_prune_deletes_server_only_app(tmp_path: Path, monkeypatch):
+    fake = _FakePx(_empty_export())
+    fake.server_apps = [{"id": "gone", "name": "Ghost", "definition": {"id": "gone", "name": "Ghost"}}]
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+    # local has no apps dir at all
+    (tmp_path / "context").mkdir()
+    (tmp_path / "prometheux.workspace.yaml").write_text(
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/t\n"
+    )
+    proj = tmp_path / "projects" / "t"
+    (proj / "concepts").mkdir(parents=True)
+    (proj / "prometheux.yaml").write_text(
+        "schemaVersion: 1\nproject:\n  id: abc123\n  name: T\n  scope: user\nconcepts: ./concepts\n"
+    )
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes", "--prune"])
+    assert result.exit_code == 0, result.output
+    assert fake.apps_deleted == [("abc123", "gone", "user")]
+
+
 def test_apply_prune_deletes(tmp_path: Path, export_dict, monkeypatch):
     fake = _FakePx(export_dict)
     _wire(monkeypatch, fake)
@@ -376,3 +631,35 @@ def test_apply_prune_deletes(tmp_path: Path, export_dict, monkeypatch):
     result = runner.invoke(cli, ["apply", str(tmp_path), "--yes", "--prune"])
     assert result.exit_code == 0, result.output
     assert fake.pruned == ["risk"]
+
+
+def test_apply_pushes_edited_ontology(tmp_path: Path, export_dict, monkeypatch):
+    fake = _FakePx(export_dict)
+    _wire(monkeypatch, fake)
+    runner = CliRunner()
+    _pull(runner, tmp_path)
+
+    onto = tmp_path / "projects" / "al-dente-supply-chain" / "ontology" / "schema.yaml"
+    onto.write_text('nodes:\n  - id: customer\nedges: []\n')
+
+    result = runner.invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert len(fake.ontologies_saved) == 1
+    ontology_id, data, scope = fake.ontologies_saved[0]
+    assert ontology_id == "abc123"
+    assert data == {"nodes": [{"id": "customer"}], "edges": []}
+    assert "ontology schema" in result.output
+
+
+def test_apply_skips_unchanged_ontology(tmp_path: Path, export_dict, monkeypatch):
+    fake = _FakePx(export_dict)
+    _wire(monkeypatch, fake)
+    runner = CliRunner()
+    concepts = _pull(runner, tmp_path)
+    # change a concept only; ontology round-trips identically
+    body = concepts / "customer.vadalog"
+    body.write_text(body.read_text() + "\ncustomer(Id, Name) :- extra(Id, Name).\n")
+
+    result = runner.invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert fake.ontologies_saved == []  # unchanged ontology is not re-pushed

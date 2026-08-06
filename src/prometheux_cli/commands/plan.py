@@ -7,8 +7,9 @@ from pathlib import Path
 
 import click
 
+from ..context import build_note_resolver
 from ..loader import load_workspace, select_projects
-from ..plan import PlanResult, plan_project
+from ..plan import PlanResult, fetch_server_apps, fetch_server_sources, plan_project
 from ..sdk import SdkError, connected_sdk
 from ..validation import find_workspace_root
 
@@ -52,9 +53,12 @@ def plan(path: Path, project_selectors) -> None:
         )
         sys.exit(2)
 
+    resolve_notes = build_note_resolver(root)
     any_changes = False
     for project in projects:
         export = None
+        server_apps = None
+        server_sources = None
         if project.id:
             try:
                 export = px.export_ontology(project.id, project.scope)
@@ -65,7 +69,10 @@ def plan(path: Path, project_selectors) -> None:
                     err=True,
                 )
                 sys.exit(1)
-        result = plan_project(project, export)
+            server_apps = fetch_server_apps(px, project.id, project.scope)
+            server_sources = fetch_server_sources(px, project.id, project.scope)
+        result = plan_project(project, export, note_resolver=resolve_notes,
+                              server_apps=server_apps, server_sources=server_sources)
         any_changes = _render(result, is_new=project.id is None) or any_changes
 
     if not any_changes:
@@ -107,6 +114,19 @@ def _render(result: PlanResult, is_new: bool) -> bool:
             click.echo("  " + click.style(f"+ datasource {d.name}", fg="green") + "  create")
         elif d.action == "delete":
             click.echo("  " + click.style(f"- datasource {d.name}", fg="red") + "  delete (withheld)")
+
+    if result.ontology_change == "create":
+        click.echo("  " + click.style("+ ontology schema", fg="green") + "  create")
+    elif result.ontology_change == "update":
+        click.echo("  " + click.style("~ ontology schema", fg="yellow") + "  update in-place")
+
+    for a in result.app_changes:
+        if a.action == "create":
+            click.echo("  " + click.style(f"+ app {a.name}", fg="green") + "  create")
+        elif a.action == "update":
+            click.echo("  " + click.style(f"~ app {a.name}", fg="yellow") + "  update in-place")
+        elif a.action == "delete":
+            click.echo("  " + click.style(f"- app {a.name}", fg="red") + "  delete (withheld — needs --prune)")
 
     if unchanged:
         click.echo(f"  = {unchanged} concept(s) unchanged")

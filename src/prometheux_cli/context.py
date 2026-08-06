@@ -8,13 +8,47 @@ decision A): the same body in two sets is two notes. Pure collection here; the
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from .parsing import ParseError, split_frontmatter
 
 RefKey = Tuple[str, str]  # (manifest path, referenced body path)
+
+
+def build_note_resolver(root: Path) -> Callable[[str], List[str]]:
+    """Return a resolver mapping a context concept's note path -> [note id(s)].
+
+    Reads the context-state written by `px context apply` (identity
+    `(manifest, path)` -> note id). A static context concept references a note by
+    its body path; we match on the full path first, then the basename. Zero or
+    multiple matches are surfaced by callers so a concept never silently pins the
+    wrong notes. Returns an empty list for every path when no state exists.
+    """
+    state_path = root / ".px" / "context-state.json"
+    state: dict = {}
+    if state_path.is_file():
+        try:
+            state = json.loads(state_path.read_text("utf-8"))
+        except (OSError, ValueError):
+            state = {}
+
+    by_path: Dict[str, List[str]] = {}
+    by_base: Dict[str, List[str]] = {}
+    for key, val in state.items():
+        note_id = (val or {}).get("id")
+        if not note_id:
+            continue
+        body = key.split("::", 1)[1] if "::" in key else key
+        by_path.setdefault(body, []).append(note_id)
+        by_base.setdefault(Path(body).name, []).append(note_id)
+
+    def resolve(path: str) -> List[str]:
+        return by_path.get(path) or by_base.get(Path(path).name) or []
+
+    return resolve
 
 
 @dataclass

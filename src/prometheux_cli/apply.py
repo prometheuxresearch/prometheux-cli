@@ -151,15 +151,52 @@ def concept_save_kwargs(
         kwargs["binds"] = binds
 
     definition = concept.body
-    if concept.concept_type in {"logic", "sql", "cypher"}:
+    if concept.concept_type == "logic":
         has_output_bind = bool(binds and binds.get("output"))
         definition = ensure_output_atom(definition, predicate, has_output_bind)
+    # sql/cypher definitions are SOURCE queries: the server transpiles them and
+    # names the head after `concept_name`, so no `@output` atom is appended
+    # (that would corrupt the SQL/Cypher before transpilation).
     kwargs["definition"] = definition
 
     if update:
         kwargs["existing_name"] = predicate
         kwargs["force_overwrite"] = True
     return kwargs
+
+
+def is_generative(concept: LocalConcept) -> bool:
+    """True for the non-Vadalog reasoning kinds saved with a ``concept_config``."""
+    return concept.concept_type in {"context", "llm"}
+
+
+def generative_concept_config(concept: LocalConcept, note_ids: List[str] = None) -> Optional[dict]:
+    """Build the ``concept_config`` for a context/llm concept (None otherwise).
+
+    - ``llm``: the ``llmConfig`` frontmatter block (provider/model/output_columns/…),
+      passed through verbatim; the prompt template is the concept body (``definition``).
+    - ``context`` **dynamic**: ``{"mode": "dynamic", "query", "top_k"?, "kinds"?}``.
+    - ``context`` **static**: ``{"mode": "static", "note_ids": [...]}`` — ``note_ids`` are
+      resolved by the caller from the manifest note paths (design §1 "How the path
+      resolves"); an explicit ``noteIds``/``note_ids`` in the meta overrides resolution.
+    """
+    meta = concept.meta or {}
+    if concept.concept_type == "llm":
+        cfg = dict(meta.get("llmConfig") or {})
+        return cfg or None
+    if concept.concept_type == "context":
+        mode = (meta.get("contextMode") or "static").strip().lower()
+        if mode == "dynamic":
+            cfg: dict = {"mode": "dynamic", "query": (meta.get("query") or "").strip()}
+            if meta.get("top_k") is not None:
+                cfg["top_k"] = meta["top_k"]
+            if meta.get("kinds"):
+                cfg["kinds"] = list(meta["kinds"])
+            return cfg
+        explicit = meta.get("noteIds") or meta.get("note_ids")
+        ids = [str(n) for n in explicit] if explicit else list(note_ids or [])
+        return {"mode": "static", "note_ids": ids}
+    return None
 
 
 def topo_order(concepts: List[LocalConcept]) -> List[LocalConcept]:

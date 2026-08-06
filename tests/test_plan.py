@@ -4,7 +4,7 @@ from click.testing import CliRunner
 
 from prometheux_cli import cli as cli_module
 from prometheux_cli.cli import cli
-from prometheux_cli.loader import LocalConcept, LocalProject
+from prometheux_cli.loader import LocalApp, LocalConcept, LocalProject
 from prometheux_cli.plan import build_dependents, plan_project, referenced_predicates
 
 
@@ -81,6 +81,150 @@ def test_create_and_delete(export_dict):
     assert actions["risk"] == "delete"
     assert result.to_create == 1
     assert result.to_delete == 1
+
+
+# ---- unit: ontology diff --------------------------------------------------
+
+def _local_with_ontology(ontology):
+    return LocalProject(
+        slug="s", id="abc123", name="Demo", scope="user",
+        concepts=[
+            _concept("customer", "customer(Id, Name) :- source_customers(Id, Name)."),
+            _concept("risk", "risk(Id) :- customer(Id, _)."),
+        ],
+        datasources={"snowflake_prod": {"name": "snowflake_prod", "type": "snowflake"}},
+        ontology=ontology,
+    )
+
+
+def test_ontology_unchanged(export_dict):
+    # fixture server ontology is {"nodes": [], "edges": []}
+    result = plan_project(_local_with_ontology({"nodes": [], "edges": []}), export_dict)
+    assert result.ontology_change == "unchanged"
+    assert not result.has_changes
+
+
+def test_ontology_update_when_differs(export_dict):
+    result = plan_project(
+        _local_with_ontology({"nodes": [{"id": "customer"}], "edges": []}), export_dict
+    )
+    assert result.ontology_change == "update"
+    assert result.has_changes
+
+
+def test_ontology_create_when_server_empty():
+    export = {"project_id": "abc123", "scope": "user", "tables": {
+        "projects_workspace_id": {"data": [{"project_id": "abc123", "name": "T"}]},
+        "concepts_abc123": {"data": []},
+    }}
+    result = plan_project(_local_with_ontology({"nodes": [], "edges": []}), export)
+    assert result.ontology_change == "create"
+    assert result.has_changes
+
+
+def test_ontology_unchanged_ignores_server_derived_edge_id():
+    # Server enriches edges with a derived `id`; a hand-authored edge omits it.
+    server = '{"nodes": [{"id": "customer"}], "edges": [{"from": "customer", "to": "order", "label": "places", "id": "customer_places_order"}]}'
+    export = {"project_id": "abc123", "scope": "user", "tables": {
+        "projects_workspace_id": {"data": [{"project_id": "abc123", "name": "T"}]},
+        "concepts_abc123": {"data": []},
+        "ontology_schema_abc123": {"data": [{"ontology_schema_data": server}]},
+    }}
+    local = LocalProject(
+        slug="s", id="abc123", name="Demo", scope="user",
+        ontology={"nodes": [{"id": "customer"}], "edges": [{"from": "customer", "to": "order", "label": "places"}]},
+    )
+    result = plan_project(local, export)
+    assert result.ontology_change == "unchanged"
+
+
+def test_ontology_none_when_no_local_file(export_dict):
+    # _local() builds a project with ontology=None
+    result = plan_project(_local([
+        _concept("customer", "customer(Id, Name) :- source_customers(Id, Name)."),
+        _concept("risk", "risk(Id) :- customer(Id, _)."),
+    ]), export_dict)
+    assert result.ontology_change is None
+
+
+# ---- unit: sql/cypher source diff -----------------------------------------
+
+def _sql_concept(pred, body):
+    return LocalConcept(predicate=pred, concept_type="sql", body=body, meta={}, path=f"{pred}.sql")
+
+
+def _sql_server_export(pred):
+    return {"project_id": "abc123", "scope": "user", "tables": {
+        "projects_workspace_id": {"data": [{"project_id": "abc123", "name": "P"}]},
+        "concepts_abc123": {"data": [{
+            "predicate_name": pred, "concept_type": "sql",
+            "rules": f"{pred}(X) <- SELECT X FROM t.",
+        }]},
+    }}
+
+
+def test_sql_unchanged_compares_source_not_rules():
+    local = LocalProject(slug="s", id="abc123", name="D", scope="user",
+                         concepts=[_sql_concept("acme", "SELECT X FROM t")])
+    result = plan_project(local, _sql_server_export("acme"),
+                          server_sources={"acme": "SELECT X FROM t"})
+    assert result.concept_changes[0].action == "unchanged"
+    assert not result.has_changes
+
+
+def test_sql_update_when_source_edited():
+    local = LocalProject(slug="s", id="abc123", name="D", scope="user",
+                         concepts=[_sql_concept("acme", "SELECT X, Y FROM t")])
+    result = plan_project(local, _sql_server_export("acme"),
+                          server_sources={"acme": "SELECT X FROM t"})
+    ch = result.concept_changes[0]
+    assert ch.action == "update" and ch.definition_changed
+
+
+# ---- unit: apps diff ------------------------------------------------------
+
+def _app(identity, name, definition, has_id=True):
+    return LocalApp(identity=identity, name=name, definition=definition, path=f"{name}.app.yaml", has_id=has_id)
+
+
+def _local_with_apps(apps):
+    return LocalProject(slug="s", id="abc123", name="Demo", scope="user", apps=apps)
+
+
+def _server_app(app_id, name, definition):
+    return {"id": app_id, "name": name, "definition": definition}
+
+
+def test_app_create_when_no_id_and_no_name_match():
+    local = _local_with_apps([_app("New", "New", {"name": "New", "pages": []}, has_id=False)])
+    result = plan_project(local, None, server_apps=[])
+    assert [(a.name, a.action) for a in result.app_changes] == [("New", "create")]
+    assert result.has_changes
+
+
+def test_app_update_when_id_matches_and_definition_differs():
+    server = [_server_app("a1", "Sales", {"id": "a1", "name": "Sales", "pages": [1]})]
+    local = _local_with_apps([_app("a1", "Sales", {"id": "a1", "name": "Sales", "pages": [2]})])
+    result = plan_project(local, None, server_apps=server)
+    ch = result.app_changes[0]
+    assert (ch.action, ch.server_id) == ("update", "a1")
+
+
+def test_app_unchanged_ignores_id_and_schema_key():
+    server = [_server_app("a1", "Sales", {"id": "a1", "name": "Sales", "pages": [1]})]
+    # local has no id and a $schema-less definition (loader strips $schema); same content
+    local = _local_with_apps([_app("Sales", "Sales", {"name": "Sales", "pages": [1]}, has_id=False)])
+    result = plan_project(local, None, server_apps=server)
+    ch = result.app_changes[0]
+    assert (ch.action, ch.server_id) == ("unchanged", "a1")  # matched by name
+    assert not result.has_changes
+
+
+def test_app_delete_when_server_only():
+    server = [_server_app("a1", "Ghost", {"id": "a1", "name": "Ghost"})]
+    result = plan_project(_local_with_apps([]), None, server_apps=server)
+    ch = result.app_changes[0]
+    assert (ch.action, ch.server_id, ch.name) == ("delete", "a1", "Ghost")
 
 
 # ---- end to end: pull then plan (round-trip is clean) --------------------

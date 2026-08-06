@@ -105,9 +105,16 @@ def _fields_to_list(raw) -> List[dict]:
     return []
 
 
-def reshape_project(export: dict, project_name: str, slug: str) -> ReshapeResult:
-    """Build the file set for ``projects/<slug>/`` from an export dict."""
+def reshape_project(export: dict, project_name: str, slug: str, sources: dict = None) -> ReshapeResult:
+    """Build the file set for ``projects/<slug>/`` from an export dict.
+
+    ``sources`` maps a predicate to its recovered sql/cypher source query (from
+    ``list_concepts`` parsed.code); when present, a sql/cypher concept's body
+    file holds that source instead of the transpiled Vadalog in ``rules``.
+    """
     import yaml  # local import keeps module import cheap
+
+    sources = sources or {}
 
     project_id = export.get("project_id", "")
     scope = export.get("scope", "user")
@@ -150,7 +157,7 @@ def reshape_project(export: dict, project_name: str, slug: str) -> ReshapeResult
     # --- concepts ---------------------------------------------------------
     concept_rows = _rows(_table(export, "concepts_"))
     for row in concept_rows:
-        _reshape_concept(row, base, result, yaml)
+        _reshape_concept(row, base, result, yaml, sources)
 
     return result
 
@@ -169,21 +176,27 @@ def _reshape_datasource(row: dict) -> dict:
     return spec
 
 
-def _reshape_concept(row: dict, base: str, result: ReshapeResult, yaml) -> None:
+def _reshape_concept(row: dict, base: str, result: ReshapeResult, yaml, sources: dict = None) -> None:
+    sources = sources or {}
     predicate = row.get("predicate_name") or "concept"
     ctype = (row.get("concept_type") or "logic").strip() or "logic"
     rules = row.get("rules") or ""
 
     if ctype in _EXT_BY_TYPE:
         ext = _EXT_BY_TYPE[ctype]
-        result.add(f"{base}/concepts/{predicate}{ext}", _ensure_newline(rules))
+        body = rules
+        if ctype in {"sql", "cypher"}:
+            recovered = sources.get(predicate)
+            if recovered is not None:
+                body = recovered  # the authored source query, not the transpiled Vadalog
+            else:
+                result.warn(
+                    f"concept '{predicate}' is {ctype}: source could not be recovered; "
+                    f"the body holds the transpiled Vadalog."
+                )
+        result.add(f"{base}/concepts/{predicate}{ext}", _ensure_newline(body))
         meta = _concept_meta(row, ctype, predicate)
         result.add(f"{base}/concepts/{predicate}.meta.yaml", _yaml(yaml, meta))
-        if ctype in {"sql", "cypher"}:
-            result.warn(
-                f"concept '{predicate}' is {ctype}: the body holds the transpiled "
-                f"Vadalog (source {ctype} recovery is not implemented yet)."
-            )
     elif ctype == "llm":
         fm = {"conceptType": "llm", "outputPredicate": predicate}
         _copy_if(fm, "group", row.get("concept_group"))

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 
+from ..plan import fetch_server_apps, fetch_server_sources
 from ..reshape import reshape_project
 from ..resources import iter_schema_files
 from ..sdk import SdkError, connected_sdk
@@ -43,7 +44,8 @@ def pull(project: str, scope: str, out: Path, slug: str) -> None:
 
     name = _project_name(export, project)
     slug = slug or _slugify(name) or project
-    result = reshape_project(export, project_name=name, slug=slug)
+    sources = fetch_server_sources(px, project, scope)
+    result = reshape_project(export, project_name=name, slug=slug, sources=sources)
 
     dest = out.resolve()
     dest.mkdir(parents=True, exist_ok=True)
@@ -52,16 +54,57 @@ def pull(project: str, scope: str, out: Path, slug: str) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(f.content, "utf-8")
 
+    app_count = _write_apps(px, project, scope, dest, slug)
+
     _ensure_workspace(dest, slug)
     _ensure_schemas(dest)
 
     for w in result.warnings:
         click.echo(f"{click.style('warning', fg='yellow')}  {w}")
+    app_note = f" + {app_count} app(s)" if app_count else ""
     click.echo(
         click.style("Pulled", fg="green", bold=True)
-        + f" '{name}' ({project}) to {dest / 'projects' / slug} — {len(result.files)} file(s)."
+        + f" '{name}' ({project}) to {dest / 'projects' / slug} — {len(result.files)} file(s){app_note}."
     )
     click.echo("Next: `px validate`")
+
+
+def _write_apps(px, project: str, scope: str, dest: Path, slug: str) -> int:
+    """Write each app's definition to projects/<slug>/apps/<slug>.app.yaml.
+
+    Apps are fetched via the SDK (not the export) and the project manifest gains
+    an `apps: ./apps` entry so a pulled project round-trips through `px apply`.
+    """
+    import yaml
+
+    apps = fetch_server_apps(px, project, scope)
+    if not apps:
+        return 0
+    apps_dir = dest / "projects" / slug / "apps"
+    apps_dir.mkdir(parents=True, exist_ok=True)
+    used = set()
+    for app in apps:
+        definition = app.get("definition") or {}
+        base = _slugify(app.get("name") or "") or (app.get("id") or "app")
+        fname = base
+        n = 2
+        while fname in used:
+            fname = f"{base}-{n}"
+            n += 1
+        used.add(fname)
+        # No bundled app JSON Schema yet, so no `$schema` hint — write the
+        # AppDefinition verbatim (the loader would strip `$schema` regardless).
+        (apps_dir / f"{fname}.app.yaml").write_text(
+            yaml.safe_dump(definition, sort_keys=False, allow_unicode=True), "utf-8"
+        )
+
+    manifest = dest / "projects" / slug / "prometheux.yaml"
+    if manifest.is_file():
+        data = yaml.safe_load(manifest.read_text("utf-8")) or {}
+        if not data.get("apps"):
+            data["apps"] = "./apps"
+            manifest.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), "utf-8")
+    return len(apps)
 
 
 def _list_projects(px, scope: str, url: str) -> None:

@@ -36,6 +36,16 @@ class LocalConcept:
 
 
 @dataclass
+class LocalApp:
+    identity: str       # definition.id when present, else the app name
+    name: str
+    definition: dict    # the AppDefinition (v2), minus the `$schema` editor hint
+    path: str           # project-relative file path
+    has_id: bool        # whether the file already carries a server id
+    file: Optional[Path] = None  # absolute path, for writing the id back on create
+
+
+@dataclass
 class LocalProject:
     slug: str
     id: Optional[str]
@@ -44,6 +54,9 @@ class LocalProject:
     concepts: List[LocalConcept] = field(default_factory=list)
     datasources: Dict[str, dict] = field(default_factory=dict)
     datasource_paths: Dict[str, Path] = field(default_factory=dict)
+    ontology: Optional[dict] = None
+    ontology_path: Optional[Path] = None
+    apps: List[LocalApp] = field(default_factory=list)
     directory: Optional[Path] = None
     manifest_path: Optional[Path] = None
 
@@ -116,6 +129,41 @@ def _load_project(proj_dir: Path, ref: str) -> LocalProject:
         name = spec.get("name") or ds_file.stem
         project.datasources[name] = spec
         project.datasource_paths[name] = ds_file
+
+    onto_ref = proj.get("ontology")
+    if onto_ref:
+        onto_file = proj_dir / onto_ref
+        if onto_file.is_file():
+            try:
+                data = load_yaml(onto_file)
+            except ParseError:
+                data = None
+            if data:
+                # `$schema` is an editor hint, not part of the ontology graph.
+                data.pop("$schema", None)
+                project.ontology = data
+                project.ontology_path = onto_file
+
+    apps_ref = proj.get("apps")
+    if apps_ref:
+        apps_dir = proj_dir / apps_ref
+        if apps_dir.is_dir():
+            for path in sorted(apps_dir.glob("*.app.yaml")):
+                try:
+                    defn = load_yaml(path)
+                except ParseError:
+                    continue
+                defn.pop("$schema", None)  # editor hint, not part of the AppDefinition
+                app_id = defn.get("id")
+                name = defn.get("name") or path.name[: -len(".app.yaml")]
+                project.apps.append(LocalApp(
+                    identity=app_id or name,
+                    name=name,
+                    definition=defn,
+                    path=str(path.relative_to(proj_dir)),
+                    has_id=bool(app_id),
+                    file=path,
+                ))
 
     return project
 
