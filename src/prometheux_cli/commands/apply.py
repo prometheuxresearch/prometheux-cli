@@ -25,7 +25,13 @@ from ..datasources import (
     resolve_secrets,
 )
 from ..loader import LocalProject, load_workspace, select_projects
-from ..plan import PlanResult, fetch_server_apps, fetch_server_sources, plan_project
+from ..plan import (
+    PlanResult,
+    fetch_server_apps,
+    fetch_server_datasources,
+    fetch_server_sources,
+    plan_project,
+)
 from ..sdk import SdkError, connected_sdk
 from ..validation import find_workspace_root
 from .plan import _render
@@ -87,8 +93,10 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
             export = None
         server_apps = fetch_server_apps(px, project.id, project.scope) if project.id else None
         server_sources = fetch_server_sources(px, project.id, project.scope) if project.id else None
+        server_datasources = fetch_server_datasources(px, project.scope)
         result = plan_project(project, export, note_resolver=resolve_notes,
-                              server_apps=server_apps, server_sources=server_sources)
+                              server_apps=server_apps, server_sources=server_sources,
+                              server_datasources=server_datasources)
         _render(result, is_new=project.id is None)
         if result.has_changes or (prune and result.to_delete):
             jobs.append((project, result, original_id))
@@ -370,6 +378,12 @@ def _apply_datasources(px, project: LocalProject, result: PlanResult):
     """
     failed: List[str] = []
     ds_binds: dict = {}
+    # Reuse the bind of a datasource that already exists on the account — no
+    # re-connect, so repeated applies don't pile up duplicate datasource rows.
+    for change in result.datasource_changes:
+        if change.action == "unchanged" and change.bind:
+            ds_binds[change.name] = change.bind
+            click.echo(f"  reusing existing datasource {change.name}")
     to_connect = [d.name for d in result.datasource_changes if d.action == "create"]
     for name in to_connect:
         spec = project.datasources.get(name)

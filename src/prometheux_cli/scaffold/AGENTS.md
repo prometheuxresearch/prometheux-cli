@@ -42,13 +42,21 @@ read the schema — it is the single source of truth.
 
 A datasource file (`datasources/*.yaml`) is one of two shapes:
 
-- **Connection** (snowflake / postgres / databricks / …) — reference every secret as
-  `${ENV_VAR}`; `px apply` resolves them from the environment and never stores them.
+- **Connection** (postgres / mariadb / clickhouse / teradata / snowflake / …) — reference
+  every secret as `${ENV_VAR}`; `px apply` resolves them from the environment and never
+  stores them. Author **one table per datasource file** (`tables:` with a single
+  fully-qualified name) so the concept binds it unambiguously — a database connect returns
+  the whole group, and one-table-per-file is how `px` picks the right one.
   ```yaml
-  name: snowflake_prod
-  type: snowflake
-  account: ${SNOWFLAKE_ACCOUNT}
-  password: ${SNOWFLAKE_PASSWORD}
+  name: pg_companies
+  type: postgresql
+  host: databases.prometheux.ai
+  port: 5432
+  username: prometheux
+  password: ${PG_PASSWORD}
+  database: prometheux
+  tables:
+    - prometheux.public.companies
   ```
 - **Local file** (csv / parquet / json / excel / …) — add a `file:` path (relative to the
   datasource file). `px apply` uploads it to the workspace disk, then connects it.
@@ -57,9 +65,28 @@ A datasource file (`datasources/*.yaml`) is one of two shapes:
   type: csv
   file: ../data/customers.csv
   ```
+- **Object store (S3) file** — no `file:` upload; connect in place. Put the **full
+  directory** (bucket **and** sub-path) in `host`, list the file in `tables`, and DO NOT set
+  `database`.
+  ```yaml
+  name: s3_air_routes
+  type: csv
+  host: s3a://my-bucket/airports      # full path — bucket AND sub-dir
+  port: 0
+  s3aAccessKey: ${S3_ACCESS_KEY}
+  s3aSecretKey: ${S3_SECRET_KEY}
+  useHeaders: "true"
+  tables:
+    - air-routes-nodes.csv
+  ```
+  ⚠️ If you split it (`host: s3a://my-bucket`, `database: airports`) the connect *succeeds*
+  but the stored bind drops the sub-directory and the concept fails at **run** time with
+  `PATH_NOT_FOUND`. Always put the whole path in `host`.
 
 A concept reads from a datasource via an input bind in its `.meta.yaml` (`binds.input`),
-referencing the datasource `name`.
+referencing the datasource `name`. `px apply` reuses a connection that already exists on the
+account (matched by type/host/port/table) instead of re-connecting, so re-applying is
+idempotent and a project can point at a shared, pre-existing datasource.
 
 ## Context conventions
 

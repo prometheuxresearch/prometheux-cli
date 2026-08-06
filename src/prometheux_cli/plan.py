@@ -35,7 +35,8 @@ class ConceptChange:
 @dataclass
 class DatasourceChange:
     name: str
-    action: str  # create | update | delete | unchanged
+    action: str  # create | unchanged
+    bind: Optional[str] = None  # existing server bind_annotation, when matched (unchanged)
 
 
 @dataclass
@@ -143,7 +144,7 @@ def _transitive_downstream(start: str, dependents: Dict[str, Set[str]]) -> List[
 
 
 def plan_project(local: LocalProject, export: Optional[dict], note_resolver=None,
-                 server_apps=None, server_sources=None) -> PlanResult:
+                 server_apps=None, server_sources=None, server_datasources=None) -> PlanResult:
     """Diff a local project against its server export (None => brand-new project).
 
     ``note_resolver`` (path -> [note id]) lets a static context concept's pinned
@@ -195,7 +196,7 @@ def plan_project(local: LocalProject, export: Optional[dict], note_resolver=None
             result.cascade[pred] = downstream
     result.populated = populated
 
-    _diff_datasources(local, export, result)
+    _diff_datasources(local, export, server_datasources, result)
     _diff_ontology(local, export, result)
     _diff_apps(local, server_apps, result)
     return result
@@ -290,17 +291,67 @@ def _metadata_changed(concept: LocalConcept, row: dict) -> bool:
     return False
 
 
-def _diff_datasources(local: LocalProject, export: Optional[dict], result: PlanResult) -> None:
-    server_rows = _table(export or {}, "datasources_")
-    server_names = {r.get("datasource_id") for r in server_rows if r.get("datasource_id")}
-    for name in local.datasources:
-        action = "unchanged" if name in server_names else "create"
-        # A finer field-level diff is deferred; secrets live only in env, so we
-        # cannot compare connection details here.
-        result.datasource_changes.append(DatasourceChange(name, action))
-    for name in server_names:
-        if name not in local.datasources:
-            result.datasource_changes.append(DatasourceChange(name, "delete"))
+def _ds_port(value) -> str:
+    """Normalize a datasource port so '', '0', 0, None all compare equal."""
+    return "" if value in (None, "", 0, "0") else str(value)
+
+
+def _ds_table(spec: dict) -> Optional[str]:
+    """The single table a connection-style datasource binds (None for file uploads)."""
+    t = spec.get("tables")
+    if isinstance(t, str) and t.strip():
+        return t.strip()
+    if isinstance(t, list) and len(t) == 1 and isinstance(t[0], str):
+        return t[0].strip()
+    return None
+
+
+def _ds_key(type_, host, port, table):
+    return (str(type_ or "").lower(), str(host or ""), _ds_port(port), str(table or ""))
+
+
+def _diff_datasources(local: LocalProject, export, server_datasources, result: PlanResult) -> None:
+    """Classify each local datasource create / unchanged, avoiding needless re-connects.
+
+    Two ways to recognize a datasource that already exists:
+    - **Connection identity** (type, host, port, table) against the account's
+      datasources (``list_sources``): matches shared/authored connections and
+      lets apply reuse the existing bind instead of re-connecting — so repeated
+      applies don't pile up duplicate datasource rows.
+    - **Name** against the project export: a pulled datasource is named by its
+      server datasource_id, so its own re-plan stays clean.
+
+    Datasources are user-scoped and shared, so none are ever deleted.
+    """
+    server_by_key = {}
+    for s in server_datasources or []:
+        key = _ds_key(s.get("datasource_type"), s.get("host"), s.get("port"), s.get("table_name"))
+        server_by_key.setdefault(key, s.get("bind_annotation"))
+    export_names = {r.get("datasource_id") for r in _table(export or {}, "datasources_")
+                    if r.get("datasource_id")}
+
+    for name, spec in local.datasources.items():
+        table = None if spec.get("file") else _ds_table(spec)
+        key = _ds_key(spec.get("type"), spec.get("host"), spec.get("port"), table)
+        bind = server_by_key.get(key) if table else None
+        if bind:
+            result.datasource_changes.append(DatasourceChange(name, "unchanged", bind=bind))
+        elif name in export_names:
+            result.datasource_changes.append(DatasourceChange(name, "unchanged"))
+        else:
+            result.datasource_changes.append(DatasourceChange(name, "create"))
+
+
+def fetch_server_datasources(px, scope: str) -> List[dict]:
+    """Every datasource already connected on the account (user-scoped).
+
+    Used to match a local connection so apply can reuse its bind instead of
+    re-connecting. Best-effort: returns ``[]`` if the endpoint is unavailable.
+    """
+    try:
+        return px.list_sources(scope=scope) or []
+    except Exception:  # noqa: BLE001 - never fail the plan over this
+        return []
 
 
 def _normalize_ontology(data) -> dict:

@@ -83,6 +83,45 @@ def test_create_and_delete(export_dict):
     assert result.to_delete == 1
 
 
+# ---- unit: datasource diff (connection-identity match) --------------------
+
+def _local_ds(datasources):
+    return LocalProject(slug="s", id="abc123", name="D", scope="user", datasources=datasources)
+
+
+def test_datasource_reused_when_connection_matches():
+    # a shared postgres connection already on the account -> reuse its bind, no re-connect
+    server = [{"datasource_type": "postgresql", "host": "db.example", "port": "5432",
+               "table_name": "prometheux.public.companies",
+               "bind_annotation": '@bind("companies","postgresql ...","prometheux","prometheux.public.companies").'}]
+    local = _local_ds({"pg_companies": {"type": "postgresql", "host": "db.example", "port": 5432,
+                                        "tables": ["prometheux.public.companies"]}})
+    result = plan_project(local, None, server_datasources=server)
+    ch = result.datasource_changes[0]
+    assert ch.action == "unchanged"
+    assert ch.bind and "prometheux.public.companies" in ch.bind
+    assert not result.has_changes
+
+
+def test_datasource_create_when_no_match():
+    server = [{"datasource_type": "mariadb", "host": "other", "port": "3306",
+               "table_name": "x", "bind_annotation": "@bind(...)."}]
+    local = _local_ds({"pg_companies": {"type": "postgresql", "host": "db.example", "port": 5432,
+                                        "tables": ["prometheux.public.companies"]}})
+    result = plan_project(local, None, server_datasources=server)
+    assert result.datasource_changes[0].action == "create"
+
+
+def test_datasource_port_normalization_matches():
+    # local port 0 / server port '' should be treated as equal (e.g. S3 csv)
+    server = [{"datasource_type": "csv", "host": "s3a://b/airports", "port": "",
+               "table_name": "a.csv", "bind_annotation": "@bind(...)."}]
+    local = _local_ds({"s3": {"type": "csv", "host": "s3a://b/airports", "port": 0,
+                              "tables": ["a.csv"]}})
+    result = plan_project(local, None, server_datasources=server)
+    assert result.datasource_changes[0].action == "unchanged"
+
+
 # ---- unit: ontology diff --------------------------------------------------
 
 def _local_with_ontology(ontology):

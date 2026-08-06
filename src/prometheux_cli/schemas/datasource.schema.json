@@ -21,6 +21,40 @@
     "diskPath": {
       "type": "string",
       "description": "Optional subdirectory under the workspace disk/ to upload `file` into (must exist server-side)."
+    },
+    "host": {
+      "type": "string",
+      "description": "Connection-style sources: the database host (e.g. databases.prometheux.ai). For an object store (csv/parquet on S3), this MUST be the FULL directory that contains the files, e.g. 's3a://bucket/airports' — NOT just the bucket. If you split it (host='s3a://bucket', database='airports') the connect succeeds but the stored bind drops the subdirectory and the concept fails at RUN time with PATH_NOT_FOUND. For S3 do not set `database`."
+    },
+    "port": {
+      "description": "Connection port, e.g. 5432 (postgres), 3306 (mariadb), 8123 (clickhouse), 1025 (teradata). Use 0 (or omit) for object-store/file sources.",
+      "type": ["integer", "string"]
+    },
+    "username": { "type": "string", "description": "Connection username." },
+    "password": {
+      "type": "string",
+      "description": "Connection password — use a ${ENV_VAR} placeholder, resolved at apply, never a literal."
+    },
+    "database": {
+      "type": "string",
+      "description": "Database/catalog name (e.g. prometheux, pmtx_data). Omit for object-store (S3) sources — put the full path in `host` instead."
+    },
+    "tables": {
+      "type": "array",
+      "description": "The table(s) this datasource binds. Author ONE table per datasource file so the concept binds it unambiguously (a DB connect returns the whole group). Use the fully-qualified name for a database (e.g. 'prometheux.public.companies') or the file name for an object store (e.g. 'air-routes-nodes.csv').",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "s3aAccessKey": {
+      "type": "string",
+      "description": "Object-store access key — use a ${ENV_VAR} placeholder."
+    },
+    "s3aSecretKey": {
+      "type": "string",
+      "description": "Object-store secret key — use a ${ENV_VAR} placeholder."
+    },
+    "useHeaders": {
+      "description": "csv only: 'true' when the first row is a header.",
+      "type": ["boolean", "string"]
     }
   }
 }

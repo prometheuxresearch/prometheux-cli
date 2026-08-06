@@ -9,7 +9,13 @@ import click
 
 from ..context import build_note_resolver
 from ..loader import load_workspace, select_projects
-from ..plan import PlanResult, fetch_server_apps, fetch_server_sources, plan_project
+from ..plan import (
+    PlanResult,
+    fetch_server_apps,
+    fetch_server_datasources,
+    fetch_server_sources,
+    plan_project,
+)
 from ..sdk import SdkError, connected_sdk
 from ..validation import find_workspace_root
 
@@ -59,6 +65,7 @@ def plan(path: Path, project_selectors) -> None:
         export = None
         server_apps = None
         server_sources = None
+        server_datasources = fetch_server_datasources(px, project.scope)
         if project.id:
             try:
                 export = px.export_ontology(project.id, project.scope)
@@ -72,7 +79,8 @@ def plan(path: Path, project_selectors) -> None:
             server_apps = fetch_server_apps(px, project.id, project.scope)
             server_sources = fetch_server_sources(px, project.id, project.scope)
         result = plan_project(project, export, note_resolver=resolve_notes,
-                              server_apps=server_apps, server_sources=server_sources)
+                              server_apps=server_apps, server_sources=server_sources,
+                              server_datasources=server_datasources)
         any_changes = _render(result, is_new=project.id is None) or any_changes
 
     if not any_changes:
