@@ -41,6 +41,11 @@ cli.add_command(context_cmd.context)
 
 def main() -> None:
     """Console-script entry point (see ``[project.scripts]`` in pyproject)."""
+    # Silence urllib3's LibreSSL notice so `px` output stays clean for scripting.
+    # Message-matched (not category) so it needs no urllib3 import and works offline.
+    import warnings
+
+    warnings.filterwarnings("ignore", message=r"urllib3 v2 only supports OpenSSL")
     cli()
 
 
