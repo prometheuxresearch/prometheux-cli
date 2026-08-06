@@ -112,6 +112,19 @@ def test_datasource_create_when_no_match():
     assert result.datasource_changes[0].action == "create"
 
 
+def test_datasource_reused_via_pulled_table_name():
+    # `pull` writes `table_name` (not `tables`); it must still match its connection
+    server = [{"datasource_type": "postgresql", "host": "db.example", "port": "5432",
+               "table_name": "prometheux.public.es_airports",
+               "bind_annotation": '@bind("es","postgresql ...","prometheux","prometheux.public.es_airports").'}]
+    local = _local_ds({"pulled": {"type": "postgresql", "host": "db.example", "port": "5432",
+                                  "database_name": "prometheux",
+                                  "table_name": "prometheux.public.es_airports"}})
+    result = plan_project(local, None, server_datasources=server)
+    ch = result.datasource_changes[0]
+    assert ch.action == "unchanged" and ch.bind
+
+
 def test_datasource_port_normalization_matches():
     # local port 0 / server port '' should be treated as equal (e.g. S3 csv)
     server = [{"datasource_type": "csv", "host": "s3a://b/airports", "port": "",

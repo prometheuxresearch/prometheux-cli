@@ -402,6 +402,80 @@ def test_apply_rewrites_app_project_id_on_recreate(tmp_path: Path, monkeypatch):
     assert saved_defs[0]["pages"][0]["project"]["id"] == "NEWID"
 
 
+def test_is_unresolved_reference():
+    from prometheux_cli.commands.apply import _is_unresolved_reference
+    assert _is_unresolved_reference("body reference(s) do not resolve to any existing concept")
+    assert _is_unresolved_reference("please create upstream concepts first")
+    assert not _is_unresolved_reference("Parsing exception: unexpected symbol")
+
+
+def test_apply_retries_concept_with_hidden_dependency(tmp_path: Path, monkeypatch):
+    """A concept whose upstream dep is hidden from topo_order (e.g. inside a SQL
+    FROM clause) still applies: the failed save is deferred and retried after its
+    upstream is created."""
+    fake = _FakePx(_empty_export())
+    saved = set()
+
+    def strict_save(**kwargs):
+        pred = kwargs["output_predicate"]
+        # `downstream` references `upstream` only inside a FROM clause, which
+        # topo_order can't see — the server rejects it until upstream exists.
+        if pred == "downstream" and "upstream" not in saved:
+            raise Exception("HTTP 500: body reference(s) do not resolve: 'upstream'")
+        saved.add(pred)
+        return {"id": pred}
+
+    fake.save_concept = strict_save
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+
+    proj = tmp_path / "projects" / "t"
+    (proj / "concepts").mkdir(parents=True)
+    (tmp_path / "context").mkdir()
+    (tmp_path / "prometheux.workspace.yaml").write_text(
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/t\n"
+    )
+    (proj / "prometheux.yaml").write_text(
+        "schemaVersion: 1\nproject:\n  id: abc123\n  name: T\n  scope: user\nconcepts: ./concepts\n"
+    )
+    # `downstream` sorts before `upstream`; its dep is hidden in a FROM clause,
+    # so topo_order leaves it first -> first save fails -> must be retried.
+    (proj / "concepts" / "downstream.vadalog").write_text("downstream(X) <- SELECT X FROM upstream.\n")
+    (proj / "concepts" / "downstream.meta.yaml").write_text("conceptType: logic\noutputPredicate: downstream\n")
+    (proj / "concepts" / "upstream.vadalog").write_text("upstream(1).\n")
+    (proj / "concepts" / "upstream.meta.yaml").write_text("conceptType: logic\noutputPredicate: upstream\n")
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert {"upstream", "downstream"} <= saved
+
+
+def test_apply_fails_when_reference_never_resolves(tmp_path: Path, monkeypatch):
+    """A genuinely missing reference (no progress possible) still fails, not loops."""
+    fake = _FakePx(_empty_export())
+
+    def strict_save(**kwargs):
+        raise Exception("HTTP 500: body reference(s) do not resolve: 'ghost'")
+
+    fake.save_concept = strict_save
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+
+    proj = tmp_path / "projects" / "t"
+    (proj / "concepts").mkdir(parents=True)
+    (tmp_path / "context").mkdir()
+    (tmp_path / "prometheux.workspace.yaml").write_text(
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/t\n"
+    )
+    (proj / "prometheux.yaml").write_text(
+        "schemaVersion: 1\nproject:\n  id: abc123\n  name: T\n  scope: user\nconcepts: ./concepts\n"
+    )
+    (proj / "concepts" / "orphan.vadalog").write_text("orphan(X) <- ghost(X).\n")
+    (proj / "concepts" / "orphan.meta.yaml").write_text("conceptType: logic\noutputPredicate: orphan\n")
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 1
+    assert "orphan" in result.output
+
+
 def test_single_table_helper():
     from prometheux_cli.commands.apply import _single_table
     assert _single_table({"tables": "prometheux.public.companies"}) == "prometheux.public.companies"

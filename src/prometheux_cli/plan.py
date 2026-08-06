@@ -297,12 +297,20 @@ def _ds_port(value) -> str:
 
 
 def _ds_table(spec: dict) -> Optional[str]:
-    """The single table a connection-style datasource binds (None for file uploads)."""
+    """The single table a connection-style datasource binds (None for file uploads).
+
+    Accepts ``tables`` (a one-element list or string, how you author it) or
+    ``table_name`` (a string, how `pull` writes it) so a pulled datasource matches
+    the same connection it came from.
+    """
     t = spec.get("tables")
     if isinstance(t, str) and t.strip():
         return t.strip()
     if isinstance(t, list) and len(t) == 1 and isinstance(t[0], str):
         return t[0].strip()
+    tn = spec.get("table_name")
+    if isinstance(tn, str) and tn.strip():
+        return tn.strip()
     return None
 
 

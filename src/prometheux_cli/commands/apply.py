@@ -181,24 +181,51 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
     updates = {c.predicate for c in result.concept_changes if c.action == "update"}
     by_pred = {c.predicate: c for c in project.concepts}
 
+    # Save deps-before-dependents; but topo_order derives edges from body
+    # predicate references and can miss a reference inside embedded SQL/Cypher
+    # (e.g. `... FROM other_concept`). So retry concepts whose save failed only
+    # because an upstream reference didn't resolve yet — additional passes create
+    # them once their upstream exists. Genuinely-missing deps / cycles surface
+    # when a pass makes no progress.
     applied = 0
-    for concept in topo_order([by_pred[p] for p in to_write if p in by_pred]):
-        kwargs = concept_save_kwargs(concept, update=concept.predicate in updates, datasource_binds=ds_binds)
-        try:
-            if is_generative(concept):
-                _save_generative_concept(project, concept, kwargs, resolve_notes)
-            else:
-                px.save_concept(ontology_id=project.id, scope=project.scope, **kwargs)
-            verb = "updated" if concept.predicate in updates else "created"
-            click.echo(f"  {verb} concept {concept.predicate}")
-            applied += 1
-        except Exception as exc:  # noqa: BLE001
+    pending = topo_order([by_pred[p] for p in to_write if p in by_pred])
+    last_error: Dict[str, str] = {}
+    while pending:
+        deferred = []
+        progressed = False
+        for concept in pending:
+            kwargs = concept_save_kwargs(concept, update=concept.predicate in updates,
+                                         datasource_binds=ds_binds)
+            try:
+                if is_generative(concept):
+                    _save_generative_concept(project, concept, kwargs, resolve_notes)
+                else:
+                    px.save_concept(ontology_id=project.id, scope=project.scope, **kwargs)
+                verb = "updated" if concept.predicate in updates else "created"
+                click.echo(f"  {verb} concept {concept.predicate}")
+                applied += 1
+                progressed = True
+            except Exception as exc:  # noqa: BLE001
+                msg = str(exc)
+                if _is_unresolved_reference(msg):
+                    deferred.append(concept)
+                    last_error[concept.predicate] = msg
+                    continue
+                click.echo(
+                    click.style("FAIL", fg="red", bold=True)
+                    + f": save of concept {concept.predicate} failed: {exc}",
+                    err=True,
+                )
+                sys.exit(1)
+        if deferred and not progressed:
+            stuck = deferred[0]
             click.echo(
                 click.style("FAIL", fg="red", bold=True)
-                + f": save of concept {concept.predicate} failed: {exc}",
+                + f": save of concept {stuck.predicate} failed: {last_error[stuck.predicate]}",
                 err=True,
             )
             sys.exit(1)
+        pending = deferred
 
     if result.ontology_change in {"create", "update"} and project.ontology:
         try:
@@ -414,6 +441,17 @@ def _apply_datasources(px, project: LocalProject, result: PlanResult):
     return failed, ds_binds
 
 
+def _is_unresolved_reference(message: str) -> bool:
+    """True when a concept save failed only because an upstream reference is not
+    yet created — safe to retry after other concepts in this apply are saved."""
+    m = (message or "").lower()
+    return (
+        "do not resolve" in m
+        or "does not resolve" in m
+        or "create upstream concepts first" in m
+    )
+
+
 def _single_table(spec: dict):
     """Return the datasource's table name when it binds exactly one table.
 
@@ -426,6 +464,9 @@ def _single_table(spec: dict):
         return t.strip()
     if isinstance(t, list) and len(t) == 1 and isinstance(t[0], str):
         return t[0].strip()
+    tn = spec.get("table_name")
+    if isinstance(tn, str) and tn.strip():
+        return tn.strip()
     return None
 
 
