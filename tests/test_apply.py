@@ -483,14 +483,54 @@ def test_apply_retries_concept_with_hidden_dependency(tmp_path: Path, monkeypatc
     assert {"upstream", "downstream"} <= saved
 
 
-def test_apply_fails_when_reference_never_resolves(tmp_path: Path, monkeypatch):
-    """A genuinely missing reference (no progress possible) still fails, not loops."""
+def test_apply_skips_unresolvable_but_applies_rest(tmp_path: Path, monkeypatch):
+    """An unresolvable concept is skipped (not fatal); the rest + the ontology
+    schema still apply, and the run exits non-zero with a skip summary."""
+    fake = _FakePx(_empty_export())
+    saved = []
+
+    def selective_save(**kwargs):
+        pred = kwargs["output_predicate"]
+        if pred == "orphan":
+            raise Exception("HTTP 500: body reference(s) do not resolve: 'ghost'")
+        saved.append(pred)
+        return {"id": pred}
+
+    fake.save_concept = selective_save
+    monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+
+    proj = tmp_path / "projects" / "t"
+    (proj / "concepts").mkdir(parents=True)
+    (proj / "ontology").mkdir(parents=True)
+    (tmp_path / "context").mkdir()
+    (tmp_path / "prometheux.workspace.yaml").write_text(
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/t\n"
+    )
+    (proj / "prometheux.yaml").write_text(
+        "schemaVersion: 1\nproject:\n  id: abc123\n  name: T\n  scope: user\n"
+        "concepts: ./concepts\nontology: ./ontology/schema.yaml\n"
+    )
+    (proj / "concepts" / "good.vadalog").write_text("good(1).\n")
+    (proj / "concepts" / "good.meta.yaml").write_text("conceptType: logic\noutputPredicate: good\n")
+    (proj / "concepts" / "orphan.vadalog").write_text("orphan(X) <- ghost(X).\n")
+    (proj / "concepts" / "orphan.meta.yaml").write_text("conceptType: logic\noutputPredicate: orphan\n")
+    (proj / "ontology" / "schema.yaml").write_text("nodes: []\nedges: []\n")
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 1                       # skips make it non-zero
+    assert "good" in saved and "orphan" not in saved   # good applied, orphan skipped
+    assert fake.ontologies_saved                        # ontology still applied
+    assert "skipped" in result.output and "orphan" in result.output
+
+
+def test_apply_genuine_error_still_aborts(tmp_path: Path, monkeypatch):
+    """A non-reference error (e.g. a parse error) aborts fast, not skipped."""
     fake = _FakePx(_empty_export())
 
-    def strict_save(**kwargs):
-        raise Exception("HTTP 500: body reference(s) do not resolve: 'ghost'")
+    def parse_fail(**kwargs):
+        raise Exception("HTTP 500: Parsing exception: unexpected symbol")
 
-    fake.save_concept = strict_save
+    fake.save_concept = parse_fail
     monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
 
     proj = tmp_path / "projects" / "t"
@@ -502,12 +542,12 @@ def test_apply_fails_when_reference_never_resolves(tmp_path: Path, monkeypatch):
     (proj / "prometheux.yaml").write_text(
         "schemaVersion: 1\nproject:\n  id: abc123\n  name: T\n  scope: user\nconcepts: ./concepts\n"
     )
-    (proj / "concepts" / "orphan.vadalog").write_text("orphan(X) <- ghost(X).\n")
-    (proj / "concepts" / "orphan.meta.yaml").write_text("conceptType: logic\noutputPredicate: orphan\n")
+    (proj / "concepts" / "c.vadalog").write_text("c(1).\n")
+    (proj / "concepts" / "c.meta.yaml").write_text("conceptType: logic\noutputPredicate: c\n")
 
     result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
     assert result.exit_code == 1
-    assert "orphan" in result.output
+    assert "FAIL" in result.output and "Parsing exception" in result.output
 
 
 def test_single_table_helper():

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List
@@ -126,9 +127,23 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
     # Shared across projects so an app in one project can reference another whose
     # id changed (e.g. recreated on a different account).
     id_remap: Dict[str, str] = {}
+    skipped: Dict[str, List[str]] = {}
     for project, result, original_id in jobs:
-        _apply_project(px, project, result, prune=prune, snapshot=not no_snapshot,
-                       resolve_notes=resolve_notes, original_id=original_id, id_remap=id_remap)
+        project_skips = _apply_project(
+            px, project, result, prune=prune, snapshot=not no_snapshot,
+            resolve_notes=resolve_notes, original_id=original_id, id_remap=id_remap)
+        if project_skips:
+            skipped[project.name] = project_skips
+
+    if skipped:
+        total = sum(len(v) for v in skipped.values())
+        click.echo(
+            "\n" + click.style("Done with skips", fg="yellow", bold=True)
+            + f": {total} concept(s) could not be applied (unresolved references):"
+        )
+        for pname, preds in skipped.items():
+            click.echo(f"  {pname}: {', '.join(preds)}")
+        sys.exit(1)
 
 
 def _project_missing(export) -> bool:
@@ -193,6 +208,7 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
     # them once their upstream exists. Genuinely-missing deps / cycles surface
     # when a pass makes no progress.
     applied = 0
+    skipped: List[str] = []
     pending = topo_order([by_pred[p] for p in to_write if p in by_pred])
     last_error: Dict[str, str] = {}
     while pending:
@@ -216,6 +232,7 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
                     deferred.append(concept)
                     last_error[concept.predicate] = msg
                     continue
+                # A genuine save error (parse, conflict, …) still aborts fast.
                 click.echo(
                     click.style("FAIL", fg="red", bold=True)
                     + f": save of concept {concept.predicate} failed: {exc}",
@@ -223,13 +240,18 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
                 )
                 sys.exit(1)
         if deferred and not progressed:
-            stuck = deferred[0]
-            click.echo(
-                click.style("FAIL", fg="red", bold=True)
-                + f": save of concept {stuck.predicate} failed: {last_error[stuck.predicate]}",
-                err=True,
-            )
-            sys.exit(1)
+            # These reference something that never resolves (a source defect, or a
+            # dependency not part of this apply). Skip them and keep going — the
+            # rest of the project (and the ontology schema / apps) still applies;
+            # the skips are reported and make the apply exit non-zero.
+            for concept in deferred:
+                reason = _reference_detail(last_error.get(concept.predicate, ""))
+                click.echo(
+                    f"  {click.style('skipped', fg='yellow', bold=True)} concept "
+                    f"{concept.predicate}: unresolved reference{reason}"
+                )
+                skipped.append(concept.predicate)
+            break
         pending = deferred
 
     if result.ontology_change in {"create", "update"} and project.ontology:
@@ -260,11 +282,13 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
     click.echo(
         click.style("Applied", fg="green", bold=True)
         + f": {applied} concept(s) written to '{project.name}'."
+        + (f" {len(skipped)} skipped." if skipped else "")
     )
     if failed_ds:
         click.echo(f"  {len(failed_ds)} datasource(s) not connected: {', '.join(failed_ds)}")
     if stale:
         click.echo(f"  downstream now stale: {', '.join(sorted(stale))} — `px run` to rebuild.")
+    return skipped
 
 
 def _remap_app_project_ids(definition: dict, id_remap, owning_id=None) -> dict:
@@ -464,6 +488,13 @@ def _is_unresolved_reference(message: str) -> bool:
         or "does not resolve" in m
         or "create upstream concepts first" in m
     )
+
+
+def _reference_detail(message: str) -> str:
+    """Extract the offending reference name(s) from an unresolved-reference error,
+    as a short `` (X, Y)`` suffix; empty string if none can be parsed."""
+    names = re.findall(r"'([^']+)'", message or "")
+    return f" ({', '.join(dict.fromkeys(names))})" if names else ""
 
 
 def _single_table(spec: dict):
