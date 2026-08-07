@@ -16,12 +16,16 @@ def load_yaml(path: Path) -> dict:
     """Load a YAML file into a dict, raising :class:`ParseError` on failure."""
     try:
         text = path.read_text("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ParseError(f"{path} is not valid UTF-8: {exc}") from exc
     except OSError as exc:
         raise ParseError(f"cannot read {path}: {exc}") from exc
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise ParseError(f"invalid YAML in {path}: {exc}") from exc
+    except RecursionError as exc:
+        raise ParseError(f"invalid YAML in {path}: structure is nested too deeply") from exc
     if data is None:
         return {}
     if not isinstance(data, dict):
@@ -37,6 +41,8 @@ def split_frontmatter(path: Path) -> Tuple[dict, str]:
     """
     try:
         text = path.read_text("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ParseError(f"{path} is not valid UTF-8: {exc}") from exc
     except OSError as exc:
         raise ParseError(f"cannot read {path}: {exc}") from exc
 
@@ -63,6 +69,8 @@ def split_frontmatter(path: Path) -> Tuple[dict, str]:
         fm = yaml.safe_load(fm_text) or {}
     except yaml.YAMLError as exc:
         raise ParseError(f"invalid frontmatter YAML in {path}: {exc}") from exc
+    except RecursionError as exc:
+        raise ParseError(f"invalid frontmatter YAML in {path}: nested too deeply") from exc
     if not isinstance(fm, dict):
         raise ParseError(f"frontmatter in {path} must be a mapping")
     return fm, body
