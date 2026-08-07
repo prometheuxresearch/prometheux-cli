@@ -176,9 +176,8 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
 
     # Create the project first if it is brand-new, and persist the id to disk.
     if not project.id:
-        project.id = _create_project(px, project)
+        project.id = _resolve_or_create_project(px, project)
         _persist_project_id(project)
-        click.echo(f"  created project {project.id}")
 
     # Record how this project's id resolved, so apps (in any project) that embed
     # the manifest's original id get it rewritten to the actual server id. This
@@ -537,9 +536,35 @@ def _upload_and_kwargs(px, project: LocalProject, name: str, spec: dict):
     return file_database_kwargs(spec["type"], disk_path, filename), filename
 
 
-def _create_project(px, project: LocalProject) -> str:
+def _resolve_or_create_project(px, project: LocalProject) -> str:
+    """Adopt an existing same-name project in scope, else create a new one.
+
+    Reconcile-on-create: if a previous apply created the project on the server
+    but its id was never persisted back to the manifest (process killed in the
+    window, or the write-back failed), the manifest is still id-less. Creating
+    unconditionally would then duplicate the project on every retry. So first
+    look for a single same-name project in scope and adopt its id; only create
+    when there is no existing match.
+    """
     try:
-        return px.save_ontology(None, project.name, project.scope)
+        existing = [p for p in (px.list_ontologies([project.scope]) or [])
+                    if p.get("name") == project.name]
+    except Exception:  # noqa: BLE001 - listing is best-effort; fall back to create
+        existing = []
+
+    if len(existing) == 1:
+        pid = str(existing[0].get("id"))
+        click.echo(f"  adopted existing project {pid} (same name in scope — no duplicate created)")
+        return pid
+    if len(existing) > 1:
+        click.echo(
+            f"  {click.style('warning', fg='yellow')} {len(existing)} projects already named "
+            f"'{project.name}'; creating a new one (can't disambiguate — set project.id to target one)"
+        )
+    try:
+        pid = px.save_ontology(None, project.name, project.scope)
+        click.echo(f"  created project {pid}")
+        return pid
     except Exception as exc:  # noqa: BLE001
         click.echo(
             click.style("FAIL", fg="red", bold=True)
@@ -555,6 +580,14 @@ def _persist_project_id(project: LocalProject) -> None:
     path = project.manifest_path
     if not path or not path.is_file():
         return
-    data = yaml.safe_load(path.read_text("utf-8")) or {}
-    data.setdefault("project", {})["id"] = project.id
-    path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), "utf-8")
+    try:
+        data = yaml.safe_load(path.read_text("utf-8")) or {}
+        data.setdefault("project", {})["id"] = project.id
+        path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), "utf-8")
+    except Exception as exc:  # noqa: BLE001 - a failed write-back must NOT crash apply
+        # The id is safe on the server and reconcile-on-create recovers it on the
+        # next run; warn loudly so the user can persist it manually if they want.
+        click.echo(
+            f"  {click.style('warning', fg='yellow')} could not write project id back to "
+            f"{path}: {exc}. Re-running apply will adopt the existing project (no duplicate)."
+        )

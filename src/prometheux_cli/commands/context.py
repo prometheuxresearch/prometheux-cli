@@ -55,6 +55,10 @@ def context_apply(path: Path, assume_yes: bool, prune: bool) -> None:
         click.echo("No context notes found (no *.context.md manifests).")
         return
 
+    adopted = _reconcile_with_server(notes, state)
+    if adopted:
+        click.echo(f"  reconciled {adopted} note(s) with existing server notes (no duplicates)")
+
     plan = [(n, _classify(n, state)) for n in notes]
     seen_keys = {_ref_str(n) for n, _ in plan}
     removed = [k for k in state if k not in seen_keys]
@@ -148,6 +152,47 @@ def _classify(note, state) -> str:
     if not prev:
         return "create"
     return "unchanged" if prev.get("hash") == _hash(note) else "update"
+
+
+def _reconcile_with_server(notes, state) -> int:
+    """Adopt matching server notes into local state before classifying.
+
+    The idempotency state (`.px/context-state.json`) is local and easily lost
+    (fresh checkout, another machine, CI, corruption). Without this, every note
+    then reclassifies as `create` and is pushed again, duplicating notes already
+    on the server. Here we look up the server's existing notes for each
+    (scope, scope_id) and, for any local note not in state whose text matches an
+    existing note, adopt that note's id — so it classifies as unchanged/update,
+    never a duplicate create. Returns the number of notes adopted.
+    """
+    missing = [n for n in notes if _ref_str(n) not in state]
+    if not missing:
+        return 0
+    try:
+        from prometheux_chain.client.jarvispy_client import JarvisPyClient
+    except Exception:  # noqa: BLE001 - SDK missing → skip reconcile
+        return 0
+
+    index: dict = {}  # (scope, scope_id) -> {text: note_id}
+    adopted = 0
+    for n in missing:
+        key = (n.scope, n.scope_id)
+        if key not in index:
+            by_text: dict = {}
+            try:
+                resp = JarvisPyClient.list_context_notes(n.scope, n.scope_id)
+                for sn in ((resp or {}).get("data") or []):
+                    txt = sn.get("text")
+                    if txt is not None and txt not in by_text:
+                        by_text[txt] = sn.get("id")
+            except Exception:  # noqa: BLE001 - best-effort; fall back to create
+                by_text = {}
+            index[key] = by_text
+        note_id = index[key].get(n.text)
+        if note_id:
+            state[_ref_str(n)] = {"id": note_id, "hash": _hash(n)}
+            adopted += 1
+    return adopted
 
 
 def _state_path(root: Path) -> Path:
