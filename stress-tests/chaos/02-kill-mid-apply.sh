@@ -21,7 +21,7 @@ SCENARIO="pxst-chaos-kill"
 source "$(dirname "$0")/../_lib.sh"
 
 NAME="Chaos Kill Test"
-ATTEMPTS="${1:-8}"
+ATTEMPTS="${1:-16}"
 
 hr; printf '%sChaos: kill px apply mid-flight → duplicate-project check%s\n' "$C_BLD" "$C_RST"; hr
 require_auth
@@ -59,8 +59,10 @@ info "projects named \"$NAME\" before: $pre (expected 0 on a clean account)"
 for ((i = 1; i <= ATTEMPTS; i++)); do
   ws="$STATE_DIR/$SCENARIO/attempt-$i"
   build_ws "$ws"
-  # random small delay to sweep the create/write-back window
-  delay="$(awk -v i="$i" 'BEGIN { srand(i*7+1); printf "%.3f", 0.02 + rand()*0.45 }')"
+  # Sweep the create HTTP window finely: apply often finishes in <0.2s on a
+  # fast account, so bias delays SMALL (early) to catch it mid-create rather
+  # than after it has already completed.
+  delay="$(awk -v i="$i" 'BEGIN { srand(i*7+1); printf "%.3f", 0.005 + rand()*0.20 }')"
   "$PX" apply "$ws" -y >"$ws/apply.log" 2>&1 &
   pid=$!
   sleep "$delay"
