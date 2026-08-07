@@ -19,9 +19,9 @@ itself is the annotated template — you can read exactly what each file should 
 
 ## Prerequisites (all examples)
 
-1. **Install `px`:**
+1. **Install `px`** (from a checkout of this repo; not yet on PyPI):
    ```bash
-   pip install prometheux_cli        # or, from a checkout:  pip install -e ".[dev]"
+   pip install -e ".[dev]"
    px --help
    ```
 2. **Authenticate.** Either `px login`, or set env vars (what the scripts use):
