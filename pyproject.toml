@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prometheux"
-version = "0.0.1"
+dynamic = ["version"]          # single-sourced from prometheux_cli.__version__
 description = "px — author a Prometheux workspace (lineage + context) as files and apply it over REST."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -26,6 +26,9 @@ dev = ["pytest>=7"]
 
 [project.scripts]
 px = "prometheux_cli.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "prometheux_cli.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

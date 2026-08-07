@@ -1,0 +1,6 @@
+# Ensure the sdist carries the offline assets the CLI needs at runtime
+# (init/validate read these). package-data covers the wheel; this covers sdist.
+include LICENSE
+include README.md
+recursive-include src/prometheux_cli/schemas *.json
+recursive-include src/prometheux_cli/scaffold *

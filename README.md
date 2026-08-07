@@ -31,6 +31,22 @@ is the source of truth for both humans and coding agents.
 
 ## Install
 
+**pipx (recommended — isolated):**
+```bash
+pipx install prometheux
+px --help
+```
+
+**pip / uv:**
+```bash
+pip install prometheux          # or:  uv tool install prometheux
+```
+
+**One-liner:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/prometheuxresearch/prometheux-cli/main/install.sh | sh
+```
+
 **From source (dev):**
 ```bash
 python3 -m venv .venv && source .venv/bin/activate

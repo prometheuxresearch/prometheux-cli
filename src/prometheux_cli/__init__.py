@@ -5,4 +5,4 @@ offline surface (schemas, `init`, `validate`) plus the `plan`/diff engine and
 `pull` file-tree reshaping; all platform I/O goes through prometheux_chain.
 """
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
