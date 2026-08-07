@@ -5,7 +5,7 @@
 `prometheux_chain` SDK.
 
 - `init` and `validate` run **fully offline** (no platform, no SDK).
-- `login`, `pull`, `plan`, `apply`, `run`, `status`, `context apply` reach the **platform**.
+- `login`, `pull`, `plan`, `apply`, `run`, `status`, `delete`, `context apply` reach the **platform**.
 
 Design doc: `engineering-docs/designs/lineage-as-code.md`. Command-by-command reference below
 is the source of truth for both humans and coding agents.
@@ -144,6 +144,24 @@ px pull                                  # list projects
 px pull 1d22942b9a0                      # write to ./projects/<slug>
 px pull 1d22942b9a0 --with-files --out /tmp/copy
 ```
+
+### `px delete PROJECT`
+Permanently delete a whole project (a server project id or exact name) and everything in it —
+concepts, datasource binds, ontology, apps, notes. The server auto-snapshots first when versioning
+is available. **Local workspace files are not touched.** Resolves by id first, then by exact name
+(ambiguous names must be deleted by id).
+
+| Option | Meaning |
+|---|---|
+| `--scope [user\|organization]` | Scope to delete from (default `user`). |
+| `-y, --yes` | Skip the confirmation prompt (for scripts/CI). |
+
+```bash
+px delete 245ba23a329           # prompts, then hard-deletes
+px delete "Credit Risk" -y      # by name, no prompt
+```
+> Wraps the SDK's `cleanup_ontologies` — the same guarded choke point used by the UI/agent/MCP; a
+> concrete project is always required (there is no "delete everything" mode).
 
 ### `px plan [PATH]`
 Diff local files against live server state (read-only). Classifies each concept create /
