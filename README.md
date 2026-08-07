@@ -7,8 +7,8 @@
 - `init` and `validate` run **fully offline** (no platform, no SDK).
 - `login`, `pull`, `plan`, `apply`, `run`, `status`, `delete`, `context apply` reach the **platform**.
 
-Design doc: `engineering-docs/designs/lineage-as-code.md`. Command-by-command reference below
-is the source of truth for both humans and coding agents.
+The command-by-command reference below is the source of truth for both humans and coding agents.
+Runnable, copy-one-folder usage examples live in [`examples/`](examples/).
 
 ---
 
@@ -56,7 +56,8 @@ px --help
 
 Requires Python ≥ 3.9. The console script `px` is installed by the `prometheux` package.
 `px` needs the `prometheux_chain` SDK on the path for any platform command (`login`, `pull`,
-`plan`, `apply`, `run`, `status`, `context apply`); offline commands (`init`, `validate`) do not.
+`plan`, `apply`, `run`, `status`, `delete`, `context apply`); offline commands (`init`, `validate`)
+do not.
 
 ---
 
@@ -123,7 +124,9 @@ px init /tmp/ws --name demo  # into a new dir with an explicit name
 ### `px validate [PATH]`
 Schema + structural checks against the bundled JSON Schemas — **fully offline**, PASS/FAIL
 exit code. Checks: manifests match their schema, concept bodies have envelopes, no duplicate
-output predicates, datasource refs resolve, context bodies exist, etc.
+output predicates, datasource refs resolve, context bodies exist, etc. Also **warns** when a
+project ships an ontology but has no concepts (a concept-less ontology renders empty on the
+platform, which draws it from concept lineage).
 
 | Option | Meaning |
 |---|---|
@@ -330,8 +333,10 @@ ontology: ./ontology/schema.yaml
 apps: ./apps
 context: ./context
 ```
-> `apply` writes the assigned `id` back into this file after creating a project. Don't
-> regenerate/overwrite the manifest after an apply or you'll lose the id (and create a duplicate).
+> `apply` writes the assigned `id` back into this file after creating a project — keep it (commit
+> it) so re-apply targets the same project. If the id is lost, `apply` reconciles by **name**
+> (adopts a single existing same-name project in scope rather than creating a duplicate); a unique
+> project name makes that reliable.
 
 ---
 
@@ -418,7 +423,7 @@ re-connected.
 ## Context layer
 
 Context lives as `*.context.md` manifests that point at pristine body files. See
-`px context apply` and the design doc for the full model. Minimal manifest:
+[`px context apply`](#px-context-apply-path) for the full model. Minimal manifest:
 ```yaml
 ---
 scope: project            # global | project
@@ -474,7 +479,8 @@ JARVISPY_URL=... PMTX_TOKEN=... PG_PASSWORD=... px apply -y
 - **Project id** is written into `projects/<slug>/prometheux.yaml` on create — commit it so
   re-apply targets the same project.
 - **Context state** (`.px/context-state.json`, keyed by `(manifest, path)`) drives idempotent
-  `context apply` — commit it too.
+  `context apply`. Commit it when you can; if it's lost, `context apply` reconciles against the
+  server's existing notes (by content) so notes aren't duplicated.
 - **Idempotent:** a clean `pull` then `plan`/`apply` reports no changes; re-applying is a
   no-op.
 - **Exit codes:** `validate` → 0 PASS / non-zero FAIL. `apply` → 0 on success; non-zero if any
@@ -484,8 +490,9 @@ JARVISPY_URL=... PMTX_TOKEN=... PG_PASSWORD=... px apply -y
 
 ## Gotchas
 
-- **Don't regenerate `prometheux.yaml` after apply** — it holds the server id; overwriting it
-  creates a duplicate project on the next apply.
+- **Keep the `id` in `prometheux.yaml`** — it targets the same project on re-apply. If it's lost,
+  `apply` adopts an existing same-name project (reconcile-by-name) instead of duplicating, so a
+  unique project name makes recovery reliable.
 - **One table per datasource file** for DB connections (a connect returns the whole group).
 - **S3 host** must be the full `bucket/sub-dir` path (see [Datasources](#datasources)).
 - **Login URL** has no `/api` suffix (the SDK adds `/api/v1`).
@@ -499,7 +506,7 @@ JARVISPY_URL=... PMTX_TOKEN=... PG_PASSWORD=... px apply -y
 ```
 src/prometheux_cli/
   cli.py            # `px` entry point (click)
-  commands/         # init, validate, login, pull, plan, apply, run, status, context
+  commands/         # init, validate, login, pull, plan, apply, run, status, delete, context
   validation.py     # offline schema + structural engine
   reshape.py        # export dict -> file tree (pull)
   loader.py         # file tree -> typed model (plan/apply)
@@ -515,11 +522,11 @@ src/prometheux_cli/
   schemas/          # published JSON Schemas — the single source of truth
   scaffold/         # `px init` starter workspace
 tests/
+examples/           # copy-and-run usage examples (one folder each)
+stress-tests/       # regression scenarios + adversarial (chaos) harnesses
 ```
 
 **Test:**
 ```bash
 pytest -q
 ```
-
-Design: `engineering-docs/designs/lineage-as-code.md`.
