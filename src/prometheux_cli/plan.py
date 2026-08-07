@@ -533,3 +533,16 @@ def _diff_ontology(local: LocalProject, export: Optional[dict], result: PlanResu
         result.ontology_change = "update"
     else:
         result.ontology_change = "unchanged"
+
+    # Hollow-ontology guard: the platform renders the ontology from concept
+    # lineage, so an ontology graph on a project with no concepts shows EMPTY.
+    # Warn (non-blocking) rather than silently creating a useless ontology.
+    if result.ontology_change in {"create", "update"} and not local.concepts:
+        onto = local.ontology if isinstance(local.ontology, dict) else {}
+        node_count = len(onto.get("nodes") or [])
+        if node_count:
+            result.warnings.append(
+                f"ontology schema declares {node_count} node(s) but this project has no "
+                "concepts — the platform renders the ontology from concept lineage, so it "
+                "will show as EMPTY. Import the graph as concepts bound to data, or drop it."
+            )
