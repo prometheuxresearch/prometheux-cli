@@ -6,6 +6,7 @@ import click
 
 from . import __version__
 from .commands import apply as apply_cmd
+from .commands import compute as compute_cmd
 from .commands import context as context_cmd
 from .commands import delete as delete_cmd
 from .commands import init as init_cmd
@@ -13,6 +14,7 @@ from .commands import login as login_cmd
 from .commands import plan as plan_cmd
 from .commands import pull as pull_cmd
 from .commands import run as run_cmd
+from .commands import show as show_cmd
 from .commands import skill as skill_cmd
 from .commands import status as status_cmd
 from .commands import validate as validate_cmd
@@ -38,8 +40,10 @@ cli.add_command(delete_cmd.delete)
 cli.add_command(plan_cmd.plan)
 cli.add_command(apply_cmd.apply)
 cli.add_command(run_cmd.run)
+cli.add_command(show_cmd.show)
 cli.add_command(status_cmd.status)
 cli.add_command(context_cmd.context)
+cli.add_command(compute_cmd.compute)
 cli.add_command(skill_cmd.skill)
 
 
