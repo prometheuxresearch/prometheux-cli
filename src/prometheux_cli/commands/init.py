@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 
+from ..agents_guide import generate_agents_md
 from ..resources import iter_schema_files
 
 _SCAFFOLD_DIR = "scaffold"
@@ -38,6 +39,11 @@ def init(directory: Path, name: str, force: bool) -> None:
 
     root = resources.files("prometheux_cli").joinpath(_SCAFFOLD_DIR)
     written = _copy_tree(root, dest, workspace_name)
+
+    # AGENTS.md is generated (preamble + schema-derived reference), never copied,
+    # so it can't drift from the schemas this build ships (design §8).
+    (dest / "AGENTS.md").write_text(generate_agents_md(), "utf-8")
+    written += 1
 
     # Generated (not part of the bundled scaffold): schemas + editor pointers.
     schemas_dir = dest / ".px" / "schemas"

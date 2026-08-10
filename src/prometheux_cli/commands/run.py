@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import ssl
 import sys
 import urllib.error
 import urllib.request
@@ -17,6 +19,21 @@ from ..loader import LocalProject, load_workspace, select_projects
 from ..openlineage import concept_datasets, dataset_namespace, make_run_event
 from ..sdk import SdkError, connected_sdk
 from ..validation import find_workspace_root
+
+
+def _ssl_context_from_env() -> Optional[ssl.SSLContext]:
+    """SSL context honouring the corporate-CA env vars ``requests`` reads.
+
+    Returns a context loading the CA bundle named by ``REQUESTS_CA_BUNDLE`` /
+    ``CURL_CA_BUNDLE`` / ``SSL_CERT_FILE`` (first that exists), or ``None`` to
+    use urllib's default (which already reads ``SSL_CERT_FILE``/``SSL_CERT_DIR``).
+    This keeps the OpenLineage emit consistent with the SDK's proxy/CA behaviour.
+    """
+    for var in ("REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "SSL_CERT_FILE"):
+        bundle = os.environ.get(var)
+        if bundle and os.path.exists(bundle):
+            return ssl.create_default_context(cafile=bundle)
+    return None
 
 
 @click.command()
@@ -156,7 +173,10 @@ class _Emitter:
             headers={"Content-Type": "application/json"}, method="POST",
         )
         try:
-            urllib.request.urlopen(req, timeout=10)  # noqa: S310 - user-supplied URL
+            # Honour the corporate CA the same way `requests` does (trust_env),
+            # so a TLS-intercepting proxy doesn't break the OpenLineage emit.
+            ctx = _ssl_context_from_env()
+            urllib.request.urlopen(req, timeout=10, context=ctx)  # noqa: S310 - user-supplied URL
         except (urllib.error.URLError, OSError) as exc:
             self.errors.append(f"http: {exc}")
 

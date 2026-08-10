@@ -34,7 +34,7 @@ version = { attr = "prometheux_cli.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-prometheux_cli = ["schemas/*.json", "scaffold/**/*"]
+prometheux_cli = ["schemas/*.json", "scaffold/**/*", "templates/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

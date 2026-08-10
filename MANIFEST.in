@@ -4,3 +4,4 @@ include LICENSE
 include README.md
 recursive-include src/prometheux_cli/schemas *.json
 recursive-include src/prometheux_cli/scaffold *
+recursive-include src/prometheux_cli/templates *.md
