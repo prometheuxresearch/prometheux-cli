@@ -126,3 +126,50 @@ def test_reshape_never_serializes_secrets(export_dict):
     assert "password" not in ds
     assert "connection_params" not in ds
     assert "type: snowflake" in ds
+
+
+# ── the body column rename: `rules` → `definition` ─────────────────────────
+# px is installed separately from the server it talks to, so a pinned CLI meets
+# an upgraded server and vice versa. Both spellings have to keep working. The
+# fixtures above still use the legacy name, which covers that half.
+
+def _body_export(concept_row: dict) -> dict:
+    pid = "p1"
+    return {
+        "project_id": pid, "scope": "user",
+        "tables": {
+            "projects_workspace_id": {"data": [{"project_id": pid, "name": "P"}]},
+            f"concepts_{pid}": {"data": [concept_row]},
+        },
+    }
+
+
+def test_reshape_reads_the_current_body_column():
+    export = _body_export({
+        "predicate_name": "customer",
+        "concept_type": "logic",
+        "definition": "customer(Id) :- source(Id).",
+    })
+    files = {f.path: f.content for f in reshape_project(export, "n", "s").files}
+    assert files["projects/s/concepts/customer.vadalog"].strip() == "customer(Id) :- source(Id)."
+
+
+def test_reshape_still_reads_a_pre_rename_server():
+    export = _body_export({
+        "predicate_name": "customer",
+        "concept_type": "logic",
+        "rules": "customer(Id) :- source(Id).",
+    })
+    files = {f.path: f.content for f in reshape_project(export, "n", "s").files}
+    assert files["projects/s/concepts/customer.vadalog"].strip() == "customer(Id) :- source(Id)."
+
+
+def test_an_llm_prompt_survives_either_spelling():
+    for column in ("definition", "rules"):
+        export = _body_export({
+            "predicate_name": "summary",
+            "concept_type": "llm",
+            column: "Summarize {{ customer }}.",
+        })
+        files = {f.path: f.content for f in reshape_project(export, "n", "s").files}
+        assert "Summarize {{ customer }}." in files["projects/s/concepts/summary.llm.md"]

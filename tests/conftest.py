@@ -43,7 +43,7 @@ def export_dict():
                     {
                         "predicate_name": "customer",
                         "concept_type": "logic",
-                        "rules": "customer(Id, Name) :- source_customers(Id, Name).",
+                        "definition": "customer(Id, Name) :- source_customers(Id, Name).",
                         "fields": '{"Id": "string", "Name": "string"}',
                         "bind_annotations": '{"input": [], "output": "@bind(\\"customer\\",\\"parquet\\",\\"disk/results/abc123\\",\\"customer\\")"}',
                         "param_annotations": "",
@@ -57,7 +57,7 @@ def export_dict():
                     {
                         "predicate_name": "risk",
                         "concept_type": "logic",
-                        "rules": "risk(Id) :- customer(Id, _).",
+                        "definition": "risk(Id) :- customer(Id, _).",
                         "fields": '{"Id": "string"}',
                         "bind_annotations": "",
                         "concept_group": "group_id",
