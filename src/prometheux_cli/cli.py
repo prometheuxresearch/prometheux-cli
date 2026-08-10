@@ -13,6 +13,7 @@ from .commands import login as login_cmd
 from .commands import plan as plan_cmd
 from .commands import pull as pull_cmd
 from .commands import run as run_cmd
+from .commands import skill as skill_cmd
 from .commands import status as status_cmd
 from .commands import validate as validate_cmd
 
@@ -39,6 +40,7 @@ cli.add_command(apply_cmd.apply)
 cli.add_command(run_cmd.run)
 cli.add_command(status_cmd.status)
 cli.add_command(context_cmd.context)
+cli.add_command(skill_cmd.skill)
 
 
 def main() -> None:

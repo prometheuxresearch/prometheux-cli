@@ -1,9 +1,15 @@
-"""Generate ``AGENTS.md`` from curated prose + the bundled JSON Schemas.
+"""Generate the authoring guide + agent skill from curated prose + the bundled schemas.
 
-The **Schema reference** section is rendered from the same schemas the package
-ships (and `px validate` enforces), so the guide cannot drift from the accepted
-file shape (design §8). `px init` calls :func:`generate_agents_md` at scaffold
-time, so a freshly scaffolded repo always documents the schemas it was built with.
+The **Schema reference** section is rendered from the same schemas the package ships
+(and `px validate` enforces), so nothing drifts from the accepted file shape (design §8).
+Three surfaces share the curated body (`templates/guide_body.md`):
+
+- ``generate_agents_md`` — the in-repo ``AGENTS.md`` (`px init` writes it).
+- ``render_skill_md`` — a Claude Code skill ``SKILL.md`` (`px skill install`).
+- ``render_cursor_rule`` — a Cursor ``.mdc`` project rule (`px skill install --cursor`).
+
+Because all three are generated from the installed package, a skill installed by a given
+`px` build always matches that build's schemas.
 """
 
 from __future__ import annotations
@@ -13,9 +19,11 @@ from typing import List
 
 from .resources import load_schema
 
-_PREAMBLE = "templates/agents_preamble.md"
+_AGENTS_INTRO = "templates/agents_preamble.md"
+_GUIDE_BODY = "templates/guide_body.md"
+_SKILL_COMMANDS = "templates/skill_commands.md"
 
-# (schema kind, the on-disk file it governs) — order = how they appear in the guide.
+# (schema kind, the on-disk file it governs) — order = how they appear in the reference.
 _REFERENCE_ORDER = [
     ("workspace", "prometheux.workspace.yaml"),
     ("project", "prometheux.yaml"),
@@ -24,6 +32,28 @@ _REFERENCE_ORDER = [
     ("datasource", "datasources/*.yaml"),
     ("context-set", "*.context.md (frontmatter)"),
 ]
+
+SKILL_NAME = "prometheux"
+SKILL_DESCRIPTION = (
+    "Author and deploy a Prometheux knowledge-graph workspace as code with the px CLI. "
+    "Use when working with Vadalog, Prometheux concepts / ontologies / datasources / apps, "
+    "lineage-as-code, the context/notes layer, or any px command "
+    "(init, validate, plan, apply, pull, run, context, status, delete)."
+)
+
+_SKILL_INTRO = """# Prometheux — author lineage & context as code with the `px` CLI
+
+Prometheux is a knowledge-graph and data-orchestration platform built on **Vadalog** (a
+declarative logic language). The `px` CLI lets you author a **workspace as files** —
+concepts (`logic`/`sql`/`cypher`/`python`/`context`/`llm`), datasources, an ontology, apps,
+and a context/notes layer — then apply it to the platform over REST. You write logic; the
+lineage graph is *derived* from predicate references. This skill tells you how to author
+those files and drive `px`.
+"""
+
+
+def _read(name: str) -> str:
+    return resources.files("prometheux_cli").joinpath(name).read_text("utf-8")
 
 
 def _type_label(spec: dict) -> str:
@@ -41,10 +71,7 @@ def _type_label(spec: dict) -> str:
 
 
 def _object_child(spec: dict):
-    """Return the sub-schema whose ``properties`` we should recurse into, if any.
-
-    Handles both an object property and an array-of-object property.
-    """
+    """Return the sub-schema whose ``properties`` to recurse into (object or array-of-object)."""
     if spec.get("type") == "object" and "properties" in spec:
         return spec
     if spec.get("type") == "array":
@@ -97,9 +124,9 @@ def render_schema_reference() -> str:
     parts = [
         "## Schema reference",
         "",
-        "Generated from the JSON Schemas in `.px/schemas/` — the single source of truth "
-        "`px validate` enforces. Fields marked *required* must be present; deeper detail "
-        "(patterns, conditionals) lives in the schema files themselves.",
+        "Generated from the JSON Schemas — the single source of truth `px validate` enforces. "
+        "Fields marked *required* must be present; deeper detail (patterns, conditionals) "
+        "lives in the schema files themselves.",
         "",
     ]
     for kind, heading in _REFERENCE_ORDER:
@@ -107,10 +134,37 @@ def render_schema_reference() -> str:
     return "\n".join(parts)
 
 
-def _preamble() -> str:
-    return resources.files("prometheux_cli").joinpath(_PREAMBLE).read_text("utf-8")
+def _join(*sections: str) -> str:
+    return "\n\n".join(s.rstrip() for s in sections) + "\n"
 
 
 def generate_agents_md() -> str:
-    """The full ``AGENTS.md``: curated preamble + generated schema reference."""
-    return _preamble().rstrip() + "\n\n" + render_schema_reference().rstrip() + "\n"
+    """The in-repo ``AGENTS.md``: repo intro + shared body + generated schema reference."""
+    return _join(_read(_AGENTS_INTRO), _read(_GUIDE_BODY), render_schema_reference())
+
+
+def render_skill_md() -> str:
+    """A Claude Code ``SKILL.md`` — the full schema reference is a sibling file."""
+    frontmatter = f"---\nname: {SKILL_NAME}\ndescription: {SKILL_DESCRIPTION}\n---\n"
+    schema_pointer = (
+        "## Schema reference\n\n"
+        "See `reference/schemas.md` for the field-by-field schema reference, and the raw "
+        "JSON Schemas in `reference/` — read them when authoring a manifest or `.meta.yaml`."
+    )
+    return _join(frontmatter + _SKILL_INTRO, _read(_GUIDE_BODY), _read(_SKILL_COMMANDS), schema_pointer)
+
+
+def render_cursor_rule() -> str:
+    """A Cursor ``.mdc`` project rule — single file, so the schema reference is inlined."""
+    frontmatter = (
+        "---\n"
+        f"description: {SKILL_DESCRIPTION}\n"
+        "alwaysApply: false\n"
+        "---\n"
+    )
+    return _join(
+        frontmatter + _SKILL_INTRO,
+        _read(_GUIDE_BODY),
+        _read(_SKILL_COMMANDS),
+        render_schema_reference(),
+    )

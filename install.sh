@@ -75,7 +75,8 @@ fi
 log ""
 if have px; then
   log "Installed: $(px --version 2>/dev/null || echo px)"
-  log "Next: px login   (or set JARVISPY_URL + PMTX_TOKEN), then px --help"
+  log "Next: px skill install   (add the agent skill for Claude Code / Cursor)"
+  log "Then: px login   (or set JARVISPY_URL + PMTX_TOKEN), then px --help"
 else
   log "Installed, but 'px' is not on your PATH yet."
   log "uv:   run 'uv tool update-shell' (or add ~/.local/bin to PATH) and restart your shell."

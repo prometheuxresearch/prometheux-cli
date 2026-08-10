@@ -42,9 +42,15 @@ px --help
 pip install prometheux          # or:  uv tool install prometheux
 ```
 
-**One-liner:**
+**One-liner (macOS / Linux):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/prometheuxresearch/prometheux-cli/main/install.sh | sh
+```
+Prefers `uv` (bootstraps it if absent) → `pipx` → `pip --user`.
+
+**One-liner (Windows):**
+```powershell
+irm https://raw.githubusercontent.com/prometheuxresearch/prometheux-cli/main/install.ps1 | iex
 ```
 
 **From source (dev):**
@@ -58,6 +64,20 @@ Requires Python ≥ 3.9. The console script `px` is installed by the `prometheux
 `px` needs the `prometheux_chain` SDK on the path for any platform command (`login`, `pull`,
 `plan`, `apply`, `run`, `status`, `delete`, `context apply`); offline commands (`init`, `validate`)
 do not.
+
+### Add the agent skill (Claude Code / Cursor)
+
+Give your coding agent everything it needs to author Prometheux workspaces — no repo to
+clone. The skill is generated from the installed `px`, so it always matches your version:
+
+```bash
+px skill install                       # global Claude Code skill (~/.claude/skills/prometheux/)
+px skill install -t cursor             # Cursor project rule (./.cursor/rules/prometheux.mdc)
+px skill install -t claude -t cursor   # both
+```
+
+Install `px`, add the skill, and your agent can drive `init` → `validate` → `plan` → `apply`
+with full knowledge of concept kinds, datasources, the context layer, and every schema.
 
 ---
 
@@ -277,6 +297,22 @@ referenced body file (scope / activation / kind), plus links (`relates_to` / `de
 ```bash
 px context apply -y
 px context apply --prune
+```
+
+### `px skill install`
+Install the Prometheux authoring skill into a coding agent, generated from this `px`'s
+bundled schemas + guide (no repo clone; always matches the installed version). Writes a
+Claude Code skill (`SKILL.md` + `reference/` schema docs) and/or a Cursor project rule.
+
+| Option | Meaning |
+|---|---|
+| `-t, --target [claude\|claude-project\|cursor]` | Where to install (repeatable). Default: `claude` (global `~/.claude/skills/prometheux/`). `claude-project` → `<dir>/.claude/skills/`; `cursor` → `<dir>/.cursor/rules/prometheux.mdc`. |
+| `--dir PATH` | Base directory for project targets. Default: current dir. |
+| `--force` | Overwrite an existing install. |
+
+```bash
+px skill install                       # global Claude Code skill
+px skill install -t cursor --dir .     # Cursor rule in this repo
 ```
 
 ---

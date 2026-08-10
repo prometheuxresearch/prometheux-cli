@@ -74,7 +74,8 @@ Write-Host ""
 if (Test-Command 'px') {
   $ver = (px --version 2>$null); if (-not $ver) { $ver = 'px' }
   Write-Host "Installed: $ver"
-  Write-Host "Next: px login   (or set JARVISPY_URL + PMTX_TOKEN), then px --help"
+  Write-Host "Next: px skill install   (add the agent skill for Claude Code / Cursor)"
+  Write-Host "Then: px login   (or set JARVISPY_URL + PMTX_TOKEN), then px --help"
 } else {
   Write-Host "Installed, but 'px' is not on your PATH yet."
   Write-Host "uv:   restart your shell (uv puts tools on PATH), or add %USERPROFILE%\.local\bin to PATH."
