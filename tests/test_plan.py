@@ -239,7 +239,7 @@ def _sql_server_export(pred):
         "projects_workspace_id": {"data": [{"project_id": "abc123", "name": "P"}]},
         "concepts_abc123": {"data": [{
             "predicate_name": pred, "concept_type": "sql",
-            "rules": f"{pred}(X) <- SELECT X FROM t.",
+            "definition": f"{pred}(X) <- SELECT X FROM t.",
         }]},
     }}
 
