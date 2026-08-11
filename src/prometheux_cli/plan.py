@@ -2,7 +2,7 @@
 
 Pure functions: given a local project model and a server export dict, classify
 each concept as create / update / delete / unchanged, and — for a concept whose
-*definition* (rules or binds) changed — compute the transitive set of downstream
+*definition* (body or binds) changed — compute the transitive set of downstream
 concepts that a change forces to re-run, along the derived lineage DAG.
 
 The DAG is derived locally: a concept's body predicate references that resolve to
@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 
 from .loader import LocalConcept, LocalProject
+from .reshape import concept_body
 
 _PREDICATE_RE = re.compile(r"([a-zA-Z_]\w*)\s*\(")
 _TRUTHY = {True, "true", "True", "t", "1", 1}
@@ -254,10 +255,10 @@ def _classify(concept: LocalConcept, row: dict, note_resolver=None, server_sourc
     server_sources = server_sources or {}
     if concept.concept_type in {"sql", "cypher"} and concept.predicate in server_sources:
         # The file holds the SOURCE query; compare against the server's recovered
-        # source (parsed.code), not the transpiled `rules` column.
-        rules_changed = _normalize_rules(server_sources[concept.predicate]) != _normalize_rules(concept.body)
+        # source (parsed.code), not the transpiled `definition` column.
+        body_changed = _normalize_rules(server_sources[concept.predicate]) != _normalize_rules(concept.body)
     else:
-        rules_changed = _normalize_rules(row.get("rules") or "") != _normalize_rules(concept.body)
+        body_changed = _normalize_rules(concept_body(row)) != _normalize_rules(concept.body)
 
     binds_changed = False
     local_binds = (concept.meta.get("annotations") or {}).get("bind_annotations")
@@ -273,10 +274,10 @@ def _classify(concept: LocalConcept, row: dict, note_resolver=None, server_sourc
             concept.predicate, "update", reason="config changed", server_populated=populated
         )
 
-    if rules_changed or binds_changed:
+    if body_changed or binds_changed:
         reasons = []
-        if rules_changed:
-            reasons.append("rules")
+        if body_changed:
+            reasons.append("definition")
         if binds_changed:
             reasons.append("binds")
         return ConceptChange(
@@ -468,7 +469,7 @@ def _diff_apps(local: LocalProject, server_apps, result: PlanResult) -> None:
 def fetch_server_sources(px, project_id: str, scope: str) -> Dict[str, str]:
     """Return ``{predicate: source query}`` for every sql/cypher concept.
 
-    A sql/cypher concept stores transpiled Vadalog in ``rules``; the authored
+    A sql/cypher concept stores transpiled Vadalog in ``definition``; the authored
     source is recovered server-side (``extract_*_from_rule``) and returned as
     ``parsed.code`` by ``list_concepts``. Diffing and pull use this so the file
     holds the source the user wrote, not the generated Vadalog. Best-effort:

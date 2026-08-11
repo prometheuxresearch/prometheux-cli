@@ -13,7 +13,7 @@ The export shape (from prometheux_chain ``export_ontology``) is::
       }
     }
 
-A concept row is a struct; its ``rules`` column is the body, the annotation
+A concept row is a struct; its ``definition`` column is the body, the annotation
 columns are the envelope. We project that back into ``<predicate>.<ext>`` +
 ``<predicate>.meta.yaml``.
 """
@@ -43,6 +43,20 @@ _DERIVED_COLUMNS = {
     "is_deterministic",
     "metadata",
 }
+
+
+def concept_body(row: dict) -> str:
+    """Read a concept row's body, whichever name the server uses for it.
+
+    The column was renamed ``rules`` → ``definition``. ``px`` is installed
+    separately from the server it talks to, so both spellings have to be accepted
+    for as long as either version is in the wild: a pinned CLI meets an upgraded
+    server, and an upgraded CLI meets a server that has not been deployed yet.
+    """
+    body = row.get("definition")
+    if body is None:
+        body = row.get("rules")
+    return body or ""
 
 
 @dataclass
@@ -123,7 +137,7 @@ def reshape_project(export: dict, project_name: str, slug: str, sources: dict = 
 
     ``sources`` maps a predicate to its recovered sql/cypher source query (from
     ``list_concepts`` parsed.code); when present, a sql/cypher concept's body
-    file holds that source instead of the transpiled Vadalog in ``rules``.
+    file holds that source instead of the transpiled Vadalog in ``definition``.
     """
     import yaml  # local import keeps module import cheap
 
@@ -193,11 +207,11 @@ def _reshape_concept(row: dict, base: str, result: ReshapeResult, yaml, sources:
     sources = sources or {}
     predicate = row.get("predicate_name") or "concept"
     ctype = (row.get("concept_type") or "logic").strip() or "logic"
-    rules = row.get("rules") or ""
+    definition = concept_body(row)
 
     if ctype in _EXT_BY_TYPE:
         ext = _EXT_BY_TYPE[ctype]
-        body = rules
+        body = definition
         if ctype in {"sql", "cypher"}:
             recovered = sources.get(predicate)
             if recovered is not None:
@@ -216,8 +230,8 @@ def _reshape_concept(row: dict, base: str, result: ReshapeResult, yaml, sources:
         llm_config = _clean_config(row.get("concept_config"))
         if llm_config:
             fm["llmConfig"] = llm_config
-        # body is the prompt template, stored verbatim in `rules`.
-        result.add(f"{base}/concepts/{predicate}.llm.md", _frontmatter(yaml, fm, rules))
+        # body is the prompt template, stored verbatim.
+        result.add(f"{base}/concepts/{predicate}.llm.md", _frontmatter(yaml, fm, definition))
     elif ctype == "context":
         cfg = _clean_config(row.get("concept_config"))
         mode = (cfg.get("mode") or "static").strip().lower()
