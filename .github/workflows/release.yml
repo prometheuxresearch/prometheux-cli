@@ -1,10 +1,21 @@
 name: release
 
-# Build and publish to PyPI when a version tag is pushed, e.g.:
-#   git tag v0.1.0 && git push origin v0.1.0
+# Auto-publish to PyPI on merge to main.
+#
+# Trigger: every push to main. The `guard` job reads the package version from
+# src/prometheux_cli/__init__.py and checks whether a matching `vX.Y.Z` git tag
+# already exists. If it does, the run is a no-op (nothing to release). If it does
+# NOT, the version was just bumped — so we test, build, publish, and create the
+# tag + GitHub Release. To ship a release you therefore only bump __version__ and
+# merge; no manual tag push.
+#
+# Why one workflow (not "merge creates a tag, tag triggers release"): a tag pushed
+# by the default GITHUB_TOKEN does NOT trigger another workflow, so the two-file
+# design would need a stored PAT. Doing everything in this single push-to-main run
+# keeps the "no long-lived secret" posture (design §9/§10).
 #
 # Publishing uses PyPI Trusted Publishing (OIDC) — no API token stored. One-time
-# setup on PyPI: project → Publishing → add a trusted publisher with
+# setup on PyPI: project → Publishing → add a (pending) publisher with
 #   owner: prometheuxresearch   repo: prometheux-cli
 #   workflow: release.yml        environment: pypi
 # (Alternatively, drop the environment + id-token and add a PYPI_API_TOKEN secret
@@ -12,10 +23,38 @@ name: release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false      # never abort a publish half-way
 
 jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.check.outputs.should_publish }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # need all tags to tell "already released" apart
+      - id: check
+        run: |
+          VER="$(grep -E '^__version__' src/prometheux_cli/__init__.py \
+                 | sed -E 's/.*"([^"]+)".*/\1/')"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          if git tag -l "v$VER" | grep -q .; then
+            echo "v$VER already tagged — nothing to publish."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "v$VER is new — will publish."
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: guard
+    if: needs.guard.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,13 +65,16 @@ jobs:
       - run: pytest -q
 
   release:
-    needs: test
+    needs: [guard, test]
+    if: needs.guard.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       id-token: write          # Trusted Publishing (PyPI) + Sigstore attestation
       attestations: write      # actions/attest-build-provenance
-      contents: write          # attach SBOM + checksums to the GitHub Release
+      contents: write          # create the tag + GitHub Release, attach artifacts
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,12 +84,11 @@ jobs:
         run: |
           python -m pip install build
           python -m build
-      - name: Check the tag matches the package version
+      - name: Sanity-check the built version matches __version__
         run: |
           python -m pip install -e .
           PKG_VER="$(python -c 'import prometheux_cli; print(prometheux_cli.__version__)')"
-          TAG_VER="${GITHUB_REF_NAME#v}"
-          test "$PKG_VER" = "$TAG_VER" || { echo "tag $TAG_VER != package $PKG_VER"; exit 1; }
+          test "$PKG_VER" = "$VERSION" || { echo "built $PKG_VER != guard $VERSION"; exit 1; }
       - name: Generate SBOM + checksums (into ./artifacts, keeping dist/ pure)
         run: |
           mkdir -p artifacts
@@ -65,9 +106,27 @@ jobs:
         # dist/ holds only the wheel + sdist; gh-action-pypi-publish emits PEP 740
         # attestations by default.
         uses: pypa/gh-action-pypi-publish@release/v1
-      - name: Attach SBOM + checksums to the GitHub Release
+      - name: Extract this version's CHANGELOG section for the release notes
+        # Pull the "## [VERSION]" block out of CHANGELOG.md. If it's missing/empty
+        # the file is still created (empty), and generate_release_notes below fills
+        # in a commit-based summary as a fallback.
+        run: |
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" {flag=1; next}
+            flag && /^## \[/ {exit}
+            flag && /^\[.*\]: http/ {next}   # drop reference-link definitions
+            flag {print}
+          ' CHANGELOG.md | sed '/./,$!d' > release-notes.md
+          echo "----- release notes preview -----"; cat release-notes.md
+      - name: Create tag vX.Y.Z + GitHub Release, attach SBOM + checksums
+        # softprops creates the tag at this commit if it does not exist yet, so
+        # no separate `git tag && git push` step (and no PAT) is needed.
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.VERSION }}
+          name: v${{ env.VERSION }}
+          body_path: release-notes.md
+          generate_release_notes: true   # appends a commit/PR summary under the CHANGELOG body
           files: |
             artifacts/sbom.cyclonedx.json
             artifacts/SHA256SUMS
