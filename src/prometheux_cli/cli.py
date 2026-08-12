@@ -20,7 +20,16 @@ from .commands import status as status_cmd
 from .commands import validate as validate_cmd
 
 
-@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@click.group(
+    context_settings={"help_option_names": ["-h", "--help"]},
+    epilog=(
+        "Examples:\n\n"
+        "  px init        Scaffold a new workspace\n"
+        "  px validate    Check the workspace offline\n"
+        "  px plan        Preview changes against the platform\n"
+        "  px apply       Apply the workspace to the platform\n"
+    ),
+)
 @click.version_option(__version__, "-V", "--version", prog_name="px")
 def cli() -> None:
     """px — Prometheux as code.
