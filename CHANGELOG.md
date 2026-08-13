@@ -15,7 +15,19 @@ would break a script.
      publishes the matching section as the GitHub Release notes. -->
 
 ### Added
-- `px list` — list ontologies, apps, datasources, and context.
+- `px list` — list ontologies, apps, datasources, context, and concepts.
+- MCP-parity commands so the CLI is a full alternative to the MCP connection:
+  - `px snapshot` — list / create / restore / delete ontology snapshots.
+  - `px policy` — list / get / create / update / delete / trigger / runs (schedules).
+  - `px template` — list / import catalogue templates.
+  - `px datasource` — preview / delete (disconnect) a data source.
+  - `px app` — publish / unpublish an app.
+  - `px query` — read-only SQL SELECT over a populated concept.
+  - `px search concepts|company` — semantic concept search + company knowledge base.
+  - `px context search` — semantic search over context notes.
+  - `px playbook` — list / show the platform's skill playbooks.
+  - `px compute catalog|provision|remove` — machine lifecycle beyond start/stop.
+  - `px validate --online` — server-side Vadalog validation of each concept body.
 
 ### Changed
 - Renamed the top-level `project` concept to `ontology` throughout the CLI

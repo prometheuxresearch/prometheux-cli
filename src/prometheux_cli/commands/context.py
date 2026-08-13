@@ -27,6 +27,36 @@ def context() -> None:
     """Manage the context layer (knowledge notes) as code."""
 
 
+@context.command("search")
+@click.argument("query")
+@click.option("--scope", default="global", type=click.Choice(["global", "project"]),
+              help="Context scope to search. `project` = one ontology (needs --ontology).")
+@click.option("--ontology", "ontology_id", default=None, help="Ontology id when --scope project.")
+@click.option("--top-k", "top_k", default=10, show_default=True, help="Max results.")
+def context_search(query: str, scope: str, ontology_id: str, top_k: int) -> None:
+    """Semantic search across saved context notes."""
+    if scope == "project" and not ontology_id:
+        click.echo(click.style("FAIL", fg="red", bold=True)
+                   + ": --scope project requires --ontology <id>.", err=True)
+        sys.exit(1)
+    try:
+        px, url, _ = connected_sdk(require_token=True)
+        notes = px.search_context_notes(query, scope, scope_id=ontology_id, top_k=top_k) or []
+    except (SdkError, Exception) as exc:  # noqa: BLE001
+        click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
+        sys.exit(1)
+    if not notes:
+        click.echo(f"No context notes matched '{query}'.")
+        return
+    click.echo(click.style(f"{len(notes)} note(s) for '{query}' at {url}:", bold=True))
+    for n in notes:
+        nid = str(n.get("id") or "")
+        kind = n.get("kind") or ""
+        text = " ".join(str(n.get("text") or "").split())
+        snippet = text if len(text) <= 80 else text[:79] + "…"
+        click.echo(f"  {nid}  {click.style(kind, dim=True)}  {snippet}")
+
+
 @context.command("apply")
 @click.argument("path", required=False, type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")

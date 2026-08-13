@@ -43,6 +43,22 @@ def list_ontologies(scope: str) -> None:
     )
 
 
+@list_.command("concepts")
+@click.option("--ontology", "ontology_id", required=True, help="Ontology id whose concepts to list.")
+@_SCOPE
+def list_concepts(ontology_id: str, scope: str) -> None:
+    """List an ontology's concepts. The PREDICATE is what `px run` / `px show` take."""
+    px, url, _ = _connect()
+    rows = _call(lambda: px.list_concepts(ontology_id, scope) or [])
+    _print_table(
+        f"Concepts in {ontology_id} at {url}",
+        ["PREDICATE", "TYPE", "GROUP", "POPULATED"],
+        [[c.get("predicate_name") or c.get("id"), c.get("concept_type"),
+          c.get("group"), "yes" if c.get("is_populated") else "no"] for c in rows],
+        empty=f"No concepts in ontology {ontology_id}.",
+    )
+
+
 @list_.command("apps")
 @_SCOPE
 def list_apps(scope: str) -> None:
