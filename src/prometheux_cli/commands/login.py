@@ -30,7 +30,7 @@ def login(url: str, token: str, no_verify: bool) -> None:
             px = load_sdk()
             px.config.set(credentials.ENV_URL, resolved_url)
             px.config.set(credentials.ENV_TOKEN, resolved_token)
-            projects = px.list_ontologies(["user"])
+            ontologies = px.list_ontologies(["user"])
         except SdkError as exc:
             click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
             sys.exit(1)
@@ -41,8 +41,8 @@ def login(url: str, token: str, no_verify: bool) -> None:
                 err=True,
             )
             sys.exit(1)
-        count = len(projects) if isinstance(projects, list) else "?"
-        click.echo(f"Authenticated against {resolved_url} ({count} project(s) visible).")
+        count = len(ontologies) if isinstance(ontologies, list) else "?"
+        click.echo(f"Authenticated against {resolved_url} ({count} ontology(s) visible).")
 
     path = credentials.save(resolved_url, resolved_token)
     click.echo(click.style("Saved", fg="green", bold=True) + f" credentials to {path}.")

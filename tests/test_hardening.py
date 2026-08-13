@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from prometheux_cli.parsing import ParseError, load_yaml
-from prometheux_cli.commands.apply import _resolve_or_create_project, _persist_project_id
+from prometheux_cli.commands.apply import _resolve_or_create_ontology, _persist_ontology_id
 
 
 # ── #22 / #23: offline parse must never traceback ───────────────────────────
@@ -47,19 +47,19 @@ def _proj():
 
 def test_resolve_adopts_single_existing_project():
     px = _FakePx([{"id": "EXIST", "name": "Demo"}])
-    assert _resolve_or_create_project(px, _proj()) == "EXIST"
+    assert _resolve_or_create_ontology(px, _proj()) == "EXIST"
     assert px.created == []                 # adopted, did NOT create a duplicate
 
 
 def test_resolve_creates_when_none_exist():
     px = _FakePx([{"id": "OTHER", "name": "Unrelated"}])
-    assert _resolve_or_create_project(px, _proj()) == "NEW_ID"
+    assert _resolve_or_create_ontology(px, _proj()) == "NEW_ID"
     assert px.created == [("Demo", "user")]
 
 
 def test_resolve_creates_when_name_is_ambiguous():
     px = _FakePx([{"id": "a", "name": "Demo"}, {"id": "b", "name": "Demo"}])
-    assert _resolve_or_create_project(px, _proj()) == "NEW_ID"
+    assert _resolve_or_create_ontology(px, _proj()) == "NEW_ID"
     assert px.created == [("Demo", "user")]
 
 
@@ -68,15 +68,15 @@ def test_resolve_falls_back_to_create_if_listing_fails():
         def list_ontologies(self, scopes):
             raise RuntimeError("network down")
     px = Broken([])
-    assert _resolve_or_create_project(px, _proj()) == "NEW_ID"
+    assert _resolve_or_create_ontology(px, _proj()) == "NEW_ID"
 
 
 def test_persist_id_failure_does_not_raise(tmp_path):
     manifest = tmp_path / "prometheux.yaml"
-    manifest.write_text("schemaVersion: 1\nproject:\n  name: Demo\n", "utf-8")
+    manifest.write_text("schemaVersion: 1\nontology:\n  name: Demo\n", "utf-8")
     manifest.chmod(0o444)                   # write-back will fail
     project = SimpleNamespace(id="ABC", manifest_path=manifest)
     try:
-        _persist_project_id(project)        # must warn, not crash
+        _persist_ontology_id(project)        # must warn, not crash
     finally:
         manifest.chmod(0o644)

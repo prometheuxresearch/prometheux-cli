@@ -61,7 +61,7 @@ def test_delete_unknown_project_fails(monkeypatch):
     result = CliRunner().invoke(cli, ["delete", "nope", "--yes"])
     assert result.exit_code == 1
     assert fake.deleted == []
-    assert "no user-scoped project" in result.output
+    assert "no user-scoped ontology" in result.output
 
 
 def test_delete_ambiguous_name_fails(monkeypatch):

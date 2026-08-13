@@ -40,13 +40,13 @@ class LocalApp:
     identity: str       # definition.id when present, else the app name
     name: str
     definition: dict    # the AppDefinition (v2), minus the `$schema` editor hint
-    path: str           # project-relative file path
+    path: str           # ontology-relative file path
     has_id: bool        # whether the file already carries a server id
     file: Optional[Path] = None  # absolute path, for writing the id back on create
 
 
 @dataclass
-class LocalProject:
+class LocalOntology:
     slug: str
     id: Optional[str]
     name: str
@@ -54,8 +54,8 @@ class LocalProject:
     concepts: List[LocalConcept] = field(default_factory=list)
     datasources: Dict[str, dict] = field(default_factory=dict)
     datasource_paths: Dict[str, Path] = field(default_factory=dict)
-    ontology: Optional[dict] = None
-    ontology_path: Optional[Path] = None
+    ontology_schema: Optional[dict] = None
+    ontology_schema_path: Optional[Path] = None
     apps: List[LocalApp] = field(default_factory=list)
     directory: Optional[Path] = None
     manifest_path: Optional[Path] = None
@@ -64,28 +64,28 @@ class LocalProject:
 @dataclass
 class LocalWorkspace:
     root: Path
-    projects: List[LocalProject] = field(default_factory=list)
+    ontologies: List[LocalOntology] = field(default_factory=list)
 
 
-def select_projects(projects: List[LocalProject], selectors):
-    """Filter ``projects`` by selectors (project name, directory slug, or id).
+def select_ontologies(ontologies: List[LocalOntology], selectors):
+    """Filter ``ontologies`` by selectors (ontology name, directory slug, or id).
 
-    Returns ``(matched, unknown)``. With no selectors, returns all projects.
+    Returns ``(matched, unknown)``. With no selectors, returns all ontologies.
     Order follows the selectors; duplicates are removed.
     """
     if not selectors:
-        return list(projects), []
-    matched: List[LocalProject] = []
+        return list(ontologies), []
+    matched: List[LocalOntology] = []
     unknown: List[str] = []
     seen = set()
     for sel in selectors:
-        hits = [p for p in projects if sel in {p.name, p.slug, p.id}]
+        hits = [o for o in ontologies if sel in {o.name, o.slug, o.id}]
         if not hits:
             unknown.append(sel)
-        for p in hits:
-            if id(p) not in seen:
-                seen.add(id(p))
-                matched.append(p)
+        for o in hits:
+            if id(o) not in seen:
+                seen.add(id(o))
+                matched.append(o)
     return matched, unknown
 
 
@@ -94,59 +94,59 @@ def load_workspace(root: Path) -> LocalWorkspace:
     ws_file = root / "prometheux.workspace.yaml"
     ws = load_yaml(ws_file)
     workspace = LocalWorkspace(root=root)
-    for proj_ref in ws.get("projects", []) or []:
-        proj_dir = (root / proj_ref).resolve()
-        workspace.projects.append(_load_project(proj_dir, proj_ref))
+    for onto_ref in ws.get("ontologies", []) or []:
+        onto_dir = (root / onto_ref).resolve()
+        workspace.ontologies.append(_load_ontology(onto_dir, onto_ref))
     return workspace
 
 
-def _load_project(proj_dir: Path, ref: str) -> LocalProject:
-    proj = load_yaml(proj_dir / "prometheux.yaml")
-    meta = proj.get("project") or {}
-    slug = proj_dir.name or ref.strip("./")
-    project = LocalProject(
+def _load_ontology(onto_dir: Path, ref: str) -> LocalOntology:
+    proj = load_yaml(onto_dir / "prometheux.yaml")
+    meta = proj.get("ontology") or {}
+    slug = onto_dir.name or ref.strip("./")
+    ontology = LocalOntology(
         slug=slug,
         id=meta.get("id"),
         name=meta.get("name") or slug,
         scope=meta.get("scope") or "user",
-        directory=proj_dir,
-        manifest_path=proj_dir / "prometheux.yaml",
+        directory=onto_dir,
+        manifest_path=onto_dir / "prometheux.yaml",
     )
 
-    concepts_dir = proj_dir / (proj.get("concepts") or "./concepts")
+    concepts_dir = onto_dir / (proj.get("concepts") or "./concepts")
     if concepts_dir.is_dir():
         for path in sorted(concepts_dir.iterdir()):
             concept = _load_concept(path)
             if concept is not None:
-                project.concepts.append(concept)
+                ontology.concepts.append(concept)
 
     for ds_ref in proj.get("datasources", []) or []:
-        ds_file = proj_dir / ds_ref
+        ds_file = onto_dir / ds_ref
         try:
             spec = load_yaml(ds_file)
         except ParseError:
             continue
         name = spec.get("name") or ds_file.stem
-        project.datasources[name] = spec
-        project.datasource_paths[name] = ds_file
+        ontology.datasources[name] = spec
+        ontology.datasource_paths[name] = ds_file
 
-    onto_ref = proj.get("ontology")
-    if onto_ref:
-        onto_file = proj_dir / onto_ref
-        if onto_file.is_file():
+    schema_ref = proj.get("ontologySchema")
+    if schema_ref:
+        schema_file = onto_dir / schema_ref
+        if schema_file.is_file():
             try:
-                data = load_yaml(onto_file)
+                data = load_yaml(schema_file)
             except ParseError:
                 data = None
             if data:
                 # `$schema` is an editor hint, not part of the ontology graph.
                 data.pop("$schema", None)
-                project.ontology = data
-                project.ontology_path = onto_file
+                ontology.ontology_schema = data
+                ontology.ontology_schema_path = schema_file
 
     apps_ref = proj.get("apps")
     if apps_ref:
-        apps_dir = proj_dir / apps_ref
+        apps_dir = onto_dir / apps_ref
         if apps_dir.is_dir():
             for path in sorted(apps_dir.glob("*.app.yaml")):
                 try:
@@ -156,16 +156,16 @@ def _load_project(proj_dir: Path, ref: str) -> LocalProject:
                 defn.pop("$schema", None)  # editor hint, not part of the AppDefinition
                 app_id = defn.get("id")
                 name = defn.get("name") or path.name[: -len(".app.yaml")]
-                project.apps.append(LocalApp(
+                ontology.apps.append(LocalApp(
                     identity=app_id or name,
                     name=name,
                     definition=defn,
-                    path=str(path.relative_to(proj_dir)),
+                    path=str(path.relative_to(onto_dir)),
                     has_id=bool(app_id),
                     file=path,
                 ))
 
-    return project
+    return ontology
 
 
 def _load_concept(path: Path) -> Optional[LocalConcept]:

@@ -11,7 +11,7 @@ from typing import List, Optional
 
 import click
 
-from ..sdk import SdkError, connected_sdk
+from ..sdk import SdkError, connected_sdk, rest_data
 
 
 def _enabled_machines(px) -> List[dict]:
@@ -83,6 +83,62 @@ def start_cmd(name, autotermination) -> None:
 def stop_cmd(name) -> None:
     """Stop machine NAME (or the only enabled one)."""
     _toggle(name, False, None)
+
+
+@compute.command("catalog")
+def catalog_cmd() -> None:
+    """List catalog machines available to provision (with their ids)."""
+    try:
+        px, _, _ = connected_sdk(require_token=True)
+        resp = px.list_machines_combined() or {}
+    except (SdkError, Exception) as exc:  # noqa: BLE001
+        click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
+        sys.exit(1)
+    data = resp.get("data") if isinstance(resp, dict) and "data" in resp else resp
+    catalog = (data or {}).get("machines") or (data or {}).get("machines_catalog") or []
+    if not catalog:
+        click.echo("No catalog machines available.")
+        return
+    click.echo(click.style("Catalog machines:", bold=True))
+    for m in catalog:
+        click.echo(f"  {str(m.get('id')):<38}  {m.get('name', '')}")
+    click.echo("\nProvision one with: px compute provision <id>")
+
+
+@compute.command("provision")
+@click.argument("machine_id")
+@click.option("--name", "machine_name", default=None, help="Optional label for your copy.")
+def provision_cmd(machine_id: str, machine_name: str) -> None:
+    """Add catalog machine MACHINE_ID to your machine list (not billable yet)."""
+    try:
+        connected_sdk(require_token=True)
+        body = {"machine_id": machine_id}
+        if machine_name:
+            body["machine_name"] = machine_name
+        data = rest_data("POST", "/api/v1/machines/user-machines/use", json=body) or {}
+    except (SdkError, Exception) as exc:  # noqa: BLE001
+        click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
+        sys.exit(1)
+    um = (data.get("user_machine") if isinstance(data, dict) else None) or {}
+    click.echo(click.style("Provisioned", fg="green", bold=True)
+               + f" machine {um.get('id') or machine_id}. Power on with `px compute start`.")
+
+
+@compute.command("remove")
+@click.argument("user_machine_id")
+@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
+def remove_cmd(user_machine_id: str, assume_yes: bool) -> None:
+    """Remove (soft-disable) USER_MACHINE_ID from your list. Usage history is kept."""
+    if not assume_yes and not click.confirm(f"Remove machine {user_machine_id}?", default=False):
+        click.echo("Aborted.")
+        sys.exit(1)
+    try:
+        connected_sdk(require_token=True)
+        rest_data("DELETE", f"/api/v1/machines/user-machines/{user_machine_id}")
+    except (SdkError, Exception) as exc:  # noqa: BLE001
+        click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
+        sys.exit(1)
+    click.echo(click.style("Removed", fg="green", bold=True) + f" machine {user_machine_id}.")
 
 
 def _toggle(name: Optional[str], active: bool, autotermination: Optional[int]) -> None:
