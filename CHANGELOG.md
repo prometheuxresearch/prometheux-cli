@@ -14,6 +14,21 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.2.0] - 2026-08-13
+
+### Changed (breaking)
+- Renamed the top-level `project` concept to `ontology` throughout the CLI. This is a
+  breaking change to the command surface and the on-disk format (hard cutover, no
+  back-compat):
+  - `px pull PROJECT` → `px pull ONTOLOGY`, `px delete PROJECT` → `px delete ONTOLOGY`.
+  - `-p, --project` → `-o, --ontology` on `plan` / `apply` / `run` / `show`.
+  - On-disk layout `projects/<slug>/` → `ontologies/<slug>/`; workspace key `projects:` →
+    `ontologies:`; manifest block `project:` → `ontology:`; the ontology schema-graph key
+    `ontology:` → `ontologySchema:`; `project.schema.json` → `ontology.schema.json`.
+  - Existing workspaces must be re-pulled (or their manifests/paths migrated by hand).
+  - Backend-wire terms are unchanged: export fields `project_id`, the context-note scope
+    value `project`, and app-definition `project` references.
+
 ### Added
 - `px list` — list ontologies, apps, datasources, context, and concepts.
 - MCP-parity commands so the CLI is a full alternative to the MCP connection:
@@ -28,12 +43,6 @@ would break a script.
   - `px playbook` — list / show the platform's skill playbooks.
   - `px compute catalog|provision|remove` — machine lifecycle beyond start/stop.
   - `px validate --online` — server-side Vadalog validation of each concept body.
-
-### Changed
-- Renamed the top-level `project` concept to `ontology` throughout the CLI
-  (commands, output, on-disk `ontologies/` layout, `ontology:` manifest key,
-  `ontology.schema.json`). Backend-wire terms (`project_id`, context scope
-  `project`) unchanged.
 
 ## [0.1.0] - 2026-08-12
 
