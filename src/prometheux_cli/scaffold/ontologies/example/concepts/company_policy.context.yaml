@@ -4,5 +4,5 @@ conceptType: context
 outputPredicate: company_policy
 contextMode: static
 notes:
-  # Paths into THIS project's context vault (ADR 0006: context concepts see project scope only).
+  # Paths into THIS ontology's context vault (ADR 0006: context concepts see project scope only).
   - credit-risk.md

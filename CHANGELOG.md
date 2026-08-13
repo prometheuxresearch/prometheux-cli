@@ -14,6 +14,15 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+### Added
+- `px list` — list ontologies, apps, datasources, and context.
+
+### Changed
+- Renamed the top-level `project` concept to `ontology` throughout the CLI
+  (commands, output, on-disk `ontologies/` layout, `ontology:` manifest key,
+  `ontology.schema.json`). Backend-wire terms (`project_id`, context scope
+  `project`) unchanged.
+
 ## [0.1.0] - 2026-08-12
 
 Initial public release.

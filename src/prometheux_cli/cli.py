@@ -10,6 +10,7 @@ from .commands import compute as compute_cmd
 from .commands import context as context_cmd
 from .commands import delete as delete_cmd
 from .commands import init as init_cmd
+from .commands import list as list_cmd
 from .commands import login as login_cmd
 from .commands import plan as plan_cmd
 from .commands import pull as pull_cmd
@@ -36,6 +37,7 @@ cli.add_command(init_cmd.init)
 cli.add_command(validate_cmd.validate)
 cli.add_command(login_cmd.login)
 cli.add_command(pull_cmd.pull)
+cli.add_command(list_cmd.list_, name="list")
 cli.add_command(delete_cmd.delete)
 cli.add_command(plan_cmd.plan)
 cli.add_command(apply_cmd.apply)

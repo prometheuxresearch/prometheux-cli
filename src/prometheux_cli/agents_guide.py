@@ -26,7 +26,7 @@ _SKILL_COMMANDS = "templates/skill_commands.md"
 # (schema kind, the on-disk file it governs) — order = how they appear in the reference.
 _REFERENCE_ORDER = [
     ("workspace", "prometheux.workspace.yaml"),
-    ("project", "prometheux.yaml"),
+    ("ontology", "prometheux.yaml"),
     ("concept-meta", "concepts/*.meta.yaml"),
     ("context-concept", "concepts/*.context.yaml"),
     ("datasource", "datasources/*.yaml"),

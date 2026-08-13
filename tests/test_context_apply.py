@@ -40,14 +40,14 @@ def _wire(monkeypatch):
 
 def _ws(tmp_path: Path, bodies: dict, manifest: str):
     (tmp_path / "prometheux.workspace.yaml").write_text(
-        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/p\n"
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies:\n  - ./ontologies/p\n"
     )
     (tmp_path / "context").mkdir(exist_ok=True)
-    proj = tmp_path / "projects" / "p"
+    proj = tmp_path / "ontologies" / "p"
     ctx = proj / "context"
     ctx.mkdir(parents=True, exist_ok=True)
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nproject:\n  id: pid1\n  name: P\n  scope: user\ncontext: ./context\n"
+        "schemaVersion: 1\nontology:\n  id: pid1\n  name: P\n  scope: user\ncontext: ./context\n"
     )
     for name, text in bodies.items():
         (ctx / name).write_text(text)
@@ -78,14 +78,14 @@ def test_upsert_lifecycle(tmp_path: Path, monkeypatch):
     assert "2 unchanged" in r2.output
 
     # Edit a body -> exactly one update.
-    (tmp_path / "projects" / "p" / "context" / "a.md").write_text("# A\nALPHA changed\n")
+    (tmp_path / "ontologies" / "p" / "context" / "a.md").write_text("# A\nALPHA changed\n")
     r3 = runner.invoke(cli, ["context", "apply", str(tmp_path), "--yes"])
     assert r3.exit_code == 0, r3.output
     assert len(fake.updated) == 1
     assert fake.updated[0][0] == "note-1"
 
     # Drop b.md from the manifest, --prune -> delete note-2.
-    (tmp_path / "projects" / "p" / "context" / "set.context.md").write_text(
+    (tmp_path / "ontologies" / "p" / "context" / "set.context.md").write_text(
         "---\nscope: project\nkind: fact\nnotes:\n  - a.md\n---\n"
     )
     r4 = runner.invoke(cli, ["context", "apply", str(tmp_path), "--yes", "--prune"])
@@ -101,7 +101,7 @@ def test_prune_withheld_without_flag(tmp_path: Path, monkeypatch):
     _ws(tmp_path, {"a.md": "# A\nx\n"}, "---\nscope: project\nnotes:\n  - a.md\n---\n")
     runner.invoke(cli, ["context", "apply", str(tmp_path), "--yes"])
     # Remove the note; apply WITHOUT --prune keeps it.
-    (tmp_path / "projects" / "p" / "context" / "set.context.md").write_text(
+    (tmp_path / "ontologies" / "p" / "context" / "set.context.md").write_text(
         "---\nscope: project\nnotes: []\n---\n"
     )
     r = runner.invoke(cli, ["context", "apply", str(tmp_path), "--yes"])

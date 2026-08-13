@@ -22,7 +22,7 @@ def _schema_root():
 # Manifest/meta kind -> bundled schema filename.
 SCHEMA_FILES: Dict[str, str] = {
     "workspace": "workspace.schema.json",
-    "project": "project.schema.json",
+    "ontology": "ontology.schema.json",
     "concept-meta": "concept-meta.schema.json",
     "context-concept": "context-concept.schema.json",
     "datasource": "datasource.schema.json",

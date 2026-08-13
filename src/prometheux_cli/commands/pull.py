@@ -1,4 +1,4 @@
-"""`px pull` — export a live project and write it as a workspace file tree."""
+"""`px pull` — export a live ontology and write it as a workspace file tree."""
 
 from __future__ import annotations
 
@@ -9,23 +9,23 @@ from pathlib import Path
 import click
 
 from ..plan import fetch_server_apps, fetch_server_sources
-from ..reshape import reshape_project
+from ..reshape import reshape_ontology
 from ..resources import iter_schema_files
 from ..sdk import SdkError, connected_sdk
 
 
 @click.command()
-@click.argument("project", required=False)
+@click.argument("ontology", required=False)
 @click.option("--scope", default="user", type=click.Choice(["user", "organization"]))
 @click.option("--out", "out", default=".", type=click.Path(path_type=Path), help="Workspace directory.")
-@click.option("--slug", default=None, help="Directory name under projects/ (default: from project name).")
+@click.option("--slug", default=None, help="Directory name under ontologies/ (default: from ontology name).")
 @click.option("--with-files", "with_files", is_flag=True,
               help="Download uploaded file-datasource content into files/ and write file: "
-                   "specs, so the project (with its files) can be re-applied elsewhere.")
-def pull(project: str, scope: str, out: Path, slug: str, with_files: bool) -> None:
-    """Pull PROJECT (a server project id) into ./projects/<slug>.
+                   "specs, so the ontology (with its files) can be re-applied elsewhere.")
+def pull(ontology: str, scope: str, out: Path, slug: str, with_files: bool) -> None:
+    """Pull ONTOLOGY (a server ontology id) into ./ontologies/<slug>.
 
-    With no PROJECT, lists the projects visible to you and exits.
+    With no ONTOLOGY, lists the ontologies visible to you and exits.
     """
     try:
         px, url, _ = connected_sdk(require_token=True)
@@ -33,22 +33,22 @@ def pull(project: str, scope: str, out: Path, slug: str, with_files: bool) -> No
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
 
-    if not project:
-        _list_projects(px, scope, url)
+    if not ontology:
+        _list_ontologies(px, scope, url)
         return
 
     try:
-        export = px.export_ontology(project, scope)
+        export = px.export_ontology(ontology, scope)
     except Exception as exc:  # noqa: BLE001 - surface SDK/HTTP errors cleanly
         click.echo(
             click.style("FAIL", fg="red", bold=True) + f": export failed: {exc}", err=True
         )
         sys.exit(1)
 
-    name = _project_name(export, project)
-    slug = slug or _slugify(name) or project
-    sources = fetch_server_sources(px, project, scope)
-    result = reshape_project(export, project_name=name, slug=slug, sources=sources)
+    name = _ontology_name(export, ontology)
+    slug = slug or _slugify(name) or ontology
+    sources = fetch_server_sources(px, ontology, scope)
+    result = reshape_ontology(export, ontology_name=name, slug=slug, sources=sources)
 
     dest = out.resolve()
     dest.mkdir(parents=True, exist_ok=True)
@@ -57,7 +57,7 @@ def pull(project: str, scope: str, out: Path, slug: str, with_files: bool) -> No
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(f.content, "utf-8")
 
-    app_count = _write_apps(px, project, scope, dest, slug)
+    app_count = _write_apps(px, ontology, scope, dest, slug)
     file_count = _download_datasource_files(px, dest, slug) if with_files else 0
 
     _ensure_workspace(dest, slug)
@@ -69,7 +69,7 @@ def pull(project: str, scope: str, out: Path, slug: str, with_files: bool) -> No
     dl_note = f" + {file_count} datasource file(s)" if file_count else ""
     click.echo(
         click.style("Pulled", fg="green", bold=True)
-        + f" '{name}' ({project}) to {dest / 'projects' / slug} — {len(result.files)} file(s){app_note}{dl_note}."
+        + f" '{name}' ({ontology}) to {dest / 'ontologies' / slug} — {len(result.files)} file(s){app_note}{dl_note}."
     )
     click.echo("Next: `px validate`")
 
@@ -80,12 +80,12 @@ def _download_datasource_files(px, dest: Path, slug: str) -> int:
     A pulled datasource whose host is under ``disk/…`` is server-side uploaded
     content. Download the file into ``files/`` and rewrite the spec to a `file:`
     form with ``diskPath`` = the original subdir, so `px apply` re-uploads it to
-    the same location the concept binds hardcode — making the project portable.
+    the same location the concept binds hardcode — making the ontology portable.
     """
     import yaml
 
-    ds_dir = dest / "projects" / slug / "datasources"
-    files_dir = dest / "projects" / slug / "files"
+    ds_dir = dest / "ontologies" / slug / "datasources"
+    files_dir = dest / "ontologies" / slug / "files"
     if not ds_dir.is_dir():
         return 0
     count = 0
@@ -114,18 +114,18 @@ def _download_datasource_files(px, dest: Path, slug: str) -> int:
     return count
 
 
-def _write_apps(px, project: str, scope: str, dest: Path, slug: str) -> int:
-    """Write each app's definition to projects/<slug>/apps/<slug>.app.yaml.
+def _write_apps(px, ontology: str, scope: str, dest: Path, slug: str) -> int:
+    """Write each app's definition to ontologies/<slug>/apps/<slug>.app.yaml.
 
-    Apps are fetched via the SDK (not the export) and the project manifest gains
-    an `apps: ./apps` entry so a pulled project round-trips through `px apply`.
+    Apps are fetched via the SDK (not the export) and the ontology manifest gains
+    an `apps: ./apps` entry so a pulled ontology round-trips through `px apply`.
     """
     import yaml
 
-    apps = fetch_server_apps(px, project, scope)
+    apps = fetch_server_apps(px, ontology, scope)
     if not apps:
         return 0
-    apps_dir = dest / "projects" / slug / "apps"
+    apps_dir = dest / "ontologies" / slug / "apps"
     apps_dir.mkdir(parents=True, exist_ok=True)
     used = set()
     for app in apps:
@@ -143,7 +143,7 @@ def _write_apps(px, project: str, scope: str, dest: Path, slug: str) -> int:
             yaml.safe_dump(definition, sort_keys=False, allow_unicode=True), "utf-8"
         )
 
-    manifest = dest / "projects" / slug / "prometheux.yaml"
+    manifest = dest / "ontologies" / slug / "prometheux.yaml"
     if manifest.is_file():
         data = yaml.safe_load(manifest.read_text("utf-8")) or {}
         if not data.get("apps"):
@@ -152,24 +152,24 @@ def _write_apps(px, project: str, scope: str, dest: Path, slug: str) -> int:
     return len(apps)
 
 
-def _list_projects(px, scope: str, url: str) -> None:
+def _list_ontologies(px, scope: str, url: str) -> None:
     try:
-        projects = px.list_ontologies([scope])
+        ontologies = px.list_ontologies([scope])
     except Exception as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
-    if not projects:
-        click.echo(f"No {scope}-scoped projects visible at {url}.")
+    if not ontologies:
+        click.echo(f"No {scope}-scoped ontologies visible at {url}.")
         return
-    click.echo(f"Projects at {url} (scope: {scope}):\n")
-    for p in projects:
+    click.echo(f"Ontologies at {url} (scope: {scope}):\n")
+    for p in ontologies:
         click.echo(f"  {p.get('id'):<16} {p.get('name', '')}")
     click.echo("\nPull one with: px pull <id>")
 
 
-def _project_name(export: dict, fallback: str) -> str:
+def _ontology_name(export: dict, fallback: str) -> str:
     for tname, tbl in (export.get("tables") or {}).items():
-        if tname.startswith("projects_"):
+        if tname.startswith("projects_"):  # server export wire prefix — unchanged
             rows = tbl.get("data") or []
             if rows and rows[0].get("name"):
                 return rows[0]["name"]
@@ -185,13 +185,13 @@ def _ensure_workspace(dest: Path, slug: str) -> None:
     import yaml
 
     ws_file = dest / "prometheux.workspace.yaml"
-    proj_ref = f"./projects/{slug}"
+    proj_ref = f"./ontologies/{slug}"
     if ws_file.is_file():
         data = yaml.safe_load(ws_file.read_text("utf-8")) or {}
-        projects = data.get("projects") or []
-        if proj_ref not in projects:
-            projects.append(proj_ref)
-            data["projects"] = projects
+        ontologies = data.get("ontologies") or []
+        if proj_ref not in ontologies:
+            ontologies.append(proj_ref)
+            data["ontologies"] = ontologies
             ws_file.write_text(
                 yaml.safe_dump(data, sort_keys=False, allow_unicode=True), "utf-8"
             )
@@ -202,7 +202,7 @@ def _ensure_workspace(dest: Path, slug: str) -> None:
         "schemaVersion": 1,
         "workspace": {"name": dest.name},
         "context": "./context",
-        "projects": [proj_ref],
+        "ontologies": [proj_ref],
     }
     ws_file.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), "utf-8")
     # A workspace manifest requires a context vault to exist per the schema-adjacent

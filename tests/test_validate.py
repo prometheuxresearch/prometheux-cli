@@ -22,7 +22,7 @@ def test_scaffold_validates_clean(tmp_path: Path):
 
 def test_missing_meta_fails(tmp_path: Path):
     root = _init(tmp_path)
-    (root / "projects" / "example" / "concepts" / "customers.meta.yaml").unlink()
+    (root / "ontologies" / "example" / "concepts" / "customers.meta.yaml").unlink()
     runner = CliRunner()
     result = runner.invoke(cli, ["validate", str(root)])
     assert result.exit_code == 1
@@ -32,7 +32,7 @@ def test_missing_meta_fails(tmp_path: Path):
 def test_duplicate_output_predicate_fails(tmp_path: Path):
     root = _init(tmp_path)
     # Make risk_score claim the same output predicate as customers.
-    meta = root / "projects" / "example" / "concepts" / "risk_score.meta.yaml"
+    meta = root / "ontologies" / "example" / "concepts" / "risk_score.meta.yaml"
     meta.write_text(
         "conceptType: logic\noutputPredicate: customer\n",
         "utf-8",
@@ -45,7 +45,7 @@ def test_duplicate_output_predicate_fails(tmp_path: Path):
 
 def test_unknown_datasource_fails(tmp_path: Path):
     root = _init(tmp_path)
-    meta = root / "projects" / "example" / "concepts" / "customers.meta.yaml"
+    meta = root / "ontologies" / "example" / "concepts" / "customers.meta.yaml"
     text = meta.read_text().replace("datasource: snowflake_prod", "datasource: nope")
     meta.write_text(text, "utf-8")
     runner = CliRunner()

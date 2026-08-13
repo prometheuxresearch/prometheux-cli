@@ -1,6 +1,6 @@
 """The plan/diff engine — the one net-new, no-precedent piece of the design.
 
-Pure functions: given a local project model and a server export dict, classify
+Pure functions: given a local ontology model and a server export dict, classify
 each concept as create / update / delete / unchanged, and — for a concept whose
 *definition* (body or binds) changed — compute the transitive set of downstream
 concepts that a change forces to re-run, along the derived lineage DAG.
@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 
-from .loader import LocalConcept, LocalProject
+from .loader import LocalConcept, LocalOntology
 from .reshape import concept_body
 
 _PREDICATE_RE = re.compile(r"([a-zA-Z_]\w*)\s*\(")
@@ -50,9 +50,9 @@ class AppChange:
 
 @dataclass
 class PlanResult:
-    project_name: str
+    ontology_name: str
     scope: str
-    project_id: Optional[str]
+    ontology_id: Optional[str]
     concept_changes: List[ConceptChange] = field(default_factory=list)
     datasource_changes: List[DatasourceChange] = field(default_factory=list)
     app_changes: List[AppChange] = field(default_factory=list)
@@ -105,7 +105,7 @@ _RESULTS_NORM_RE = re.compile(r'disk/results/[^/"\'\\]+')
 
 
 def _norm_results_paths(s: str) -> str:
-    """Blank out the project-id in ``disk/results/<id>`` for stable comparison."""
+    """Blank out the ontology-id in ``disk/results/<id>`` for stable comparison."""
     return _RESULTS_NORM_RE.sub("disk/results/@", s or "")
 
 
@@ -152,10 +152,10 @@ def _transitive_downstream(start: str, dependents: Dict[str, Set[str]]) -> List[
     return order
 
 
-def plan_project(local: LocalProject, export: Optional[dict], note_resolver=None,
+def plan_ontology(local: LocalOntology, export: Optional[dict], note_resolver=None,
                  server_apps=None, server_sources=None, server_datasources=None,
                  with_files: bool = False) -> PlanResult:
-    """Diff a local project against its server export (None => brand-new project).
+    """Diff a local ontology against its server export (None => brand-new ontology).
 
     ``note_resolver`` (path -> [note id]) lets a static context concept's pinned
     note set participate in the diff, so re-pinning after `px context apply` shows
@@ -165,7 +165,7 @@ def plan_project(local: LocalProject, export: Optional[dict], note_resolver=None
     via ``list_apps``/``get_app`` — apps live in a renamed table the export can't
     reliably name, so they are diffed from this dedicated fetch instead.
     """
-    result = PlanResult(project_name=local.name, scope=local.scope, project_id=local.id)
+    result = PlanResult(ontology_name=local.name, scope=local.scope, ontology_id=local.id)
 
     server_rows = _table(export or {}, "concepts_")
     server = {r.get("predicate_name"): r for r in server_rows if r.get("predicate_name")}
@@ -175,7 +175,7 @@ def plan_project(local: LocalProject, export: Optional[dict], note_resolver=None
     # Duplicate output predicates locally would make the DAG ambiguous.
     if len(local_by_pred) != len(local.concepts):
         result.warnings.append(
-            "duplicate output predicates in local project; plan may be inaccurate "
+            "duplicate output predicates in local ontology; plan may be inaccurate "
             "(run `px validate`)"
         )
 
@@ -263,9 +263,9 @@ def _classify(concept: LocalConcept, row: dict, note_resolver=None, server_sourc
     binds_changed = False
     local_binds = (concept.meta.get("annotations") or {}).get("bind_annotations")
     if local_binds is not None:
-        # Ignore the project-id in `disk/results/<id>` (a sibling-output path that
-        # apply retargets at the current project) so a pulled concept matches its
-        # own project regardless of the source id — keeps re-apply idempotent.
+        # Ignore the ontology-id in `disk/results/<id>` (a sibling-output path that
+        # apply retargets at the current ontology) so a pulled concept matches its
+        # own ontology regardless of the source id — keeps re-apply idempotent.
         binds_changed = (_norm_results_paths(_canon(row.get("bind_annotations")))
                          != _norm_results_paths(_canon(local_binds)))
 
@@ -346,7 +346,7 @@ def _file_ds_key(spec: dict):
     return _ds_key(spec.get("type"), host, "", fname)
 
 
-def _diff_datasources(local: LocalProject, export, server_datasources, result: PlanResult,
+def _diff_datasources(local: LocalOntology, export, server_datasources, result: PlanResult,
                       with_files: bool = False) -> None:
     """Classify each local datasource create / unchanged, avoiding needless re-connects.
 
@@ -355,7 +355,7 @@ def _diff_datasources(local: LocalProject, export, server_datasources, result: P
       datasources (``list_sources``): matches shared/authored connections and
       lets apply reuse the existing bind instead of re-connecting — so repeated
       applies don't pile up duplicate datasource rows.
-    - **Name** against the project export: a pulled datasource is named by its
+    - **Name** against the ontology export: a pulled datasource is named by its
       server datasource_id, so its own re-plan stays clean.
 
     Datasources are user-scoped and shared, so none are ever deleted.
@@ -433,7 +433,7 @@ def _app_differs(local_def: dict, server_def: dict) -> bool:
     return _canon(_clean(local_def)) != _canon(_clean(server_def))
 
 
-def _diff_apps(local: LocalProject, server_apps, result: PlanResult) -> None:
+def _diff_apps(local: LocalOntology, server_apps, result: PlanResult) -> None:
     """Classify each app create / update / unchanged, and server-only apps delete.
 
     Identity is the app's server ``id`` when the file has one; a file without an
@@ -466,7 +466,7 @@ def _diff_apps(local: LocalProject, server_apps, result: PlanResult) -> None:
             )
 
 
-def fetch_server_sources(px, project_id: str, scope: str) -> Dict[str, str]:
+def fetch_server_sources(px, ontology_id: str, scope: str) -> Dict[str, str]:
     """Return ``{predicate: source query}`` for every sql/cypher concept.
 
     A sql/cypher concept stores transpiled Vadalog in ``definition``; the authored
@@ -476,7 +476,7 @@ def fetch_server_sources(px, project_id: str, scope: str) -> Dict[str, str]:
     returns ``{}`` if the endpoint is unavailable.
     """
     try:
-        concepts = px.list_concepts(project_id, scope) or []
+        concepts = px.list_concepts(ontology_id, scope) or []
     except Exception:  # noqa: BLE001 - never fail the plan over this
         return {}
     sources: Dict[str, str] = {}
@@ -489,16 +489,16 @@ def fetch_server_sources(px, project_id: str, scope: str) -> Dict[str, str]:
     return sources
 
 
-def fetch_server_apps(px, project_id: str, scope: str) -> List[dict]:
-    """Load every app's ``{id, name, definition}`` for a project (best-effort).
+def fetch_server_apps(px, ontology_id: str, scope: str) -> List[dict]:
+    """Load every app's ``{id, name, definition}`` for an ontology (best-effort).
 
-    Apps are fetched via ``list_apps`` + ``get_app`` rather than the project
+    Apps are fetched via ``list_apps`` + ``get_app`` rather than the ontology
     export, because the export table was renamed (``dashboards_`` -> ``apps_``)
     and cannot be named reliably across migration states. Returns ``[]`` when the
-    project has no apps or the endpoint is unavailable.
+    ontology has no apps or the endpoint is unavailable.
     """
     try:
-        metas = px.list_apps(project_id, scope) or []
+        metas = px.list_apps(ontology_id, scope) or []
     except Exception:  # noqa: BLE001 - apps are optional; never fail the plan
         return []
     apps: List[dict] = []
@@ -507,7 +507,7 @@ def fetch_server_apps(px, project_id: str, scope: str) -> List[dict]:
         if not app_id:
             continue
         try:
-            full = px.get_app(project_id, app_id, scope) or {}
+            full = px.get_app(ontology_id, app_id, scope) or {}
             apps.append({
                 "id": full.get("id") or app_id,
                 "name": full.get("name") or meta.get("name"),
@@ -518,32 +518,32 @@ def fetch_server_apps(px, project_id: str, scope: str) -> List[dict]:
     return apps
 
 
-def _diff_ontology(local: LocalProject, export: Optional[dict], result: PlanResult) -> None:
-    """Classify the project's ontology schema as create / update / unchanged.
+def _diff_ontology(local: LocalOntology, export: Optional[dict], result: PlanResult) -> None:
+    """Classify the ontology's schema graph as create / update / unchanged.
 
-    Left None when there is no local ontology file — apply never touches the
-    server ontology in that case (safe-by-default, like withheld deletions).
+    Left None when there is no local ontology schema file — apply never touches
+    the server ontology in that case (safe-by-default, like withheld deletions).
     """
-    if not local.ontology:
+    if not local.ontology_schema:
         return
     server_rows = _table(export or {}, "ontology_schema_")
     server_data = server_rows[0].get("ontology_schema_data") if server_rows else None
     if not server_data:
         result.ontology_change = "create"
-    elif _canon(_normalize_ontology(server_data)) != _canon(_normalize_ontology(local.ontology)):
+    elif _canon(_normalize_ontology(server_data)) != _canon(_normalize_ontology(local.ontology_schema)):
         result.ontology_change = "update"
     else:
         result.ontology_change = "unchanged"
 
     # Hollow-ontology guard: the platform renders the ontology from concept
-    # lineage, so an ontology graph on a project with no concepts shows EMPTY.
+    # lineage, so a schema graph on an ontology with no concepts shows EMPTY.
     # Warn (non-blocking) rather than silently creating a useless ontology.
     if result.ontology_change in {"create", "update"} and not local.concepts:
-        onto = local.ontology if isinstance(local.ontology, dict) else {}
+        onto = local.ontology_schema if isinstance(local.ontology_schema, dict) else {}
         node_count = len(onto.get("nodes") or [])
         if node_count:
             result.warnings.append(
-                f"ontology schema declares {node_count} node(s) but this project has no "
+                f"ontology schema declares {node_count} node(s) but this ontology has no "
                 "concepts — the platform renders the ontology from concept lineage, so it "
                 "will show as EMPTY. Import the graph as concepts bound to data, or drop it."
             )

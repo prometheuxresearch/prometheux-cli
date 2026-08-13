@@ -35,13 +35,13 @@ for s in ./0*.sh; do "$s" || echo "^ $s FAILED"; done
 
 ## How state is handled
 
-The CLI has **no delete-project command**, so to avoid littering the account
-each scenario reuses **one** project per script:
+The CLI has **no delete-ontology command**, so to avoid littering the account
+each scenario reuses **one** ontology per script:
 
 - Generated workspaces live under `stress-tests/.state/<scenario>/ws`
-  (git-ignored). The project `id` written back into `prometheux.yaml` on the
-  first apply is reused on later runs, so re-running **updates** that project.
-- `PX_FRESH=1` starts a brand-new project instead. The previous one becomes an
+  (git-ignored). The ontology `id` written back into `prometheux.yaml` on the
+  first apply is reused on later runs, so re-running **updates** that ontology.
+- `PX_FRESH=1` starts a brand-new ontology instead. The previous one becomes an
   orphan (the script warns) — clean it up via the platform UI / MCP
   `delete_ontology` if needed.
 - `PX_KEEP=1` is a no-op today (workspaces are always kept under `.state/`).
@@ -52,7 +52,7 @@ each scenario reuses **one** project per script:
 |---|---|
 | `JARVISPY_URL`, `PMTX_TOKEN` | account + JWT (required) |
 | `PX` | path to the `px` binary (default: PATH, else `../.venv/bin/px`) |
-| `PX_FRESH=1` | create a new project this run (orphans the old one) |
+| `PX_FRESH=1` | create a new ontology this run (orphans the old one) |
 | `PG_PASSWORD`, `S3_*`, … | secrets any scenario's datasources reference via `${ENV}` |
 
 ## Adding a scenario

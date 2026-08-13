@@ -52,7 +52,7 @@ def status(watch: bool, interval: float, scope: str) -> None:
 
 
 def _fetch(px, scopes):
-    """Join the ontology list with the latest run per project into rows."""
+    """Join the ontology list with the latest run per ontology into rows."""
     try:
         onts = px.list_ontologies(scopes) or []
     except Exception as exc:  # noqa: BLE001
