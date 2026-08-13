@@ -566,3 +566,7 @@ stress-tests/       # regression scenarios + adversarial (chaos) harnesses
 ```bash
 pytest -q
 ```
+
+## Release history
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the full release history.
