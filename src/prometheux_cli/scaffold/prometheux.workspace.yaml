@@ -4,5 +4,5 @@ schemaVersion: 1
 workspace:
   name: {{WORKSPACE_NAME}}
 context: ./context
-projects:
-  - ./projects/example
+ontologies:
+  - ./ontologies/example

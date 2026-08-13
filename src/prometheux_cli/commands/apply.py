@@ -25,13 +25,13 @@ from ..datasources import (
     is_file_based,
     resolve_secrets,
 )
-from ..loader import LocalProject, load_workspace, select_projects
+from ..loader import LocalOntology, load_workspace, select_ontologies
 from ..plan import (
     PlanResult,
     fetch_server_apps,
     fetch_server_datasources,
     fetch_server_sources,
-    plan_project,
+    plan_ontology,
 )
 from ..sdk import SdkError, connected_sdk
 from ..validation import find_workspace_root
@@ -40,21 +40,21 @@ from .plan import _render
 
 @click.command()
 @click.argument("path", required=False, type=click.Path(exists=True, file_okay=False, path_type=Path))
-@click.option("--project", "-p", "project_selectors", multiple=True,
-              help="Only apply the named project(s), by name / directory slug / id. Repeatable.")
+@click.option("--ontology", "-o", "ontology_selectors", multiple=True,
+              help="Only apply the named ontology(s), by name / directory slug / id. Repeatable.")
 @click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
 @click.option("--prune", is_flag=True, help="Also delete concepts present on the server but not in files.")
-@click.option("--no-snapshot", is_flag=True, help="Do not snapshot each project before applying.")
+@click.option("--no-snapshot", is_flag=True, help="Do not snapshot each ontology before applying.")
 @click.option("--with-files", "with_files", is_flag=True,
               help="Re-upload file datasources even when an identical one already exists "
                    "on the account (refresh content). New files always upload.")
-def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snapshot: bool,
+def apply(path: Path, ontology_selectors, assume_yes: bool, prune: bool, no_snapshot: bool,
           with_files: bool) -> None:
     """Apply the workspace to the platform.
 
     Shows the same diff as `px plan`, then (after confirmation) creates/updates
-    concepts. Deletions happen only with --prune. Each changed project is
-    snapshotted first so an apply is recoverable. Use --project to target a
+    concepts. Deletions happen only with --prune. Each changed ontology is
+    snapshotted first so an apply is recoverable. Use --ontology to target a
     subset instead of the whole workspace. A file datasource that already exists
     on the account is reused (not re-uploaded) unless --with-files is given.
     """
@@ -75,37 +75,37 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
         sys.exit(1)
 
     workspace = load_workspace(root)
-    projects, unknown = select_projects(workspace.projects, project_selectors)
+    ontologies, unknown = select_ontologies(workspace.ontologies, ontology_selectors)
     if unknown:
-        available = ", ".join(sorted({p.name for p in workspace.projects})) or "(none)"
+        available = ", ".join(sorted({p.name for p in workspace.ontologies})) or "(none)"
         click.echo(
             click.style("FAIL", fg="red", bold=True)
-            + f": unknown project(s): {', '.join(unknown)}. Available: {available}",
+            + f": unknown ontology(s): {', '.join(unknown)}. Available: {available}",
             err=True,
         )
         sys.exit(2)
 
     resolve_notes = build_note_resolver(root)
     jobs = []
-    for project in projects:
-        export = _export(px, project)
-        original_id = project.id  # the manifest id before any recreate (may be from another account)
-        if project.id and _project_missing(export):
+    for ontology in ontologies:
+        export = _export(px, ontology)
+        original_id = ontology.id  # the manifest id before any recreate (may be from another account)
+        if ontology.id and _ontology_missing(export):
             click.echo(
-                f"  {click.style('warning', fg='yellow')} project id {project.id} not found on "
-                f"server — recreating '{project.name}'."
+                f"  {click.style('warning', fg='yellow')} ontology id {ontology.id} not found on "
+                f"server — recreating '{ontology.name}'."
             )
-            project.id = None
+            ontology.id = None
             export = None
-        server_apps = fetch_server_apps(px, project.id, project.scope) if project.id else None
-        server_sources = fetch_server_sources(px, project.id, project.scope) if project.id else None
-        server_datasources = fetch_server_datasources(px, project.scope)
-        result = plan_project(project, export, note_resolver=resolve_notes,
+        server_apps = fetch_server_apps(px, ontology.id, ontology.scope) if ontology.id else None
+        server_sources = fetch_server_sources(px, ontology.id, ontology.scope) if ontology.id else None
+        server_datasources = fetch_server_datasources(px, ontology.scope)
+        result = plan_ontology(ontology, export, note_resolver=resolve_notes,
                               server_apps=server_apps, server_sources=server_sources,
                               server_datasources=server_datasources, with_files=with_files)
-        _render(result, is_new=project.id is None)
+        _render(result, is_new=ontology.id is None)
         if result.has_changes or (prune and result.to_delete):
-            jobs.append((project, result, original_id))
+            jobs.append((ontology, result, original_id))
 
     if not jobs:
         click.echo("\nNo changes to apply.")
@@ -124,16 +124,16 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
             click.echo("Aborted. Nothing was changed.")
             sys.exit(1)
 
-    # Shared across projects so an app in one project can reference another whose
+    # Shared across ontologies so an app in one ontology can reference another whose
     # id changed (e.g. recreated on a different account).
     id_remap: Dict[str, str] = {}
     skipped: Dict[str, List[str]] = {}
-    for project, result, original_id in jobs:
-        project_skips = _apply_project(
-            px, project, result, prune=prune, snapshot=not no_snapshot,
+    for ontology, result, original_id in jobs:
+        ontology_skips = _apply_ontology(
+            px, ontology, result, prune=prune, snapshot=not no_snapshot,
             resolve_notes=resolve_notes, original_id=original_id, id_remap=id_remap)
-        if project_skips:
-            skipped[project.name] = project_skips
+        if ontology_skips:
+            skipped[ontology.name] = ontology_skips
 
     if skipped:
         total = sum(len(v) for v in skipped.values())
@@ -146,8 +146,8 @@ def apply(path: Path, project_selectors, assume_yes: bool, prune: bool, no_snaps
         sys.exit(1)
 
 
-def _project_missing(export) -> bool:
-    """True when an export has no project row — the id no longer exists server-side."""
+def _ontology_missing(export) -> bool:
+    """True when an export has no ontology row — the id no longer exists server-side."""
     if not export:
         return True
     for name, tbl in (export.get("tables") or {}).items():
@@ -156,49 +156,49 @@ def _project_missing(export) -> bool:
     return True
 
 
-def _export(px, project: LocalProject):
-    if not project.id:
+def _export(px, ontology: LocalOntology):
+    if not ontology.id:
         return None
     try:
-        return px.export_ontology(project.id, project.scope)
+        return px.export_ontology(ontology.id, ontology.scope)
     except Exception as exc:  # noqa: BLE001
         click.echo(
             click.style("FAIL", fg="red", bold=True)
-            + f": export of project {project.id} failed: {exc}",
+            + f": export of ontology {ontology.id} failed: {exc}",
             err=True,
         )
         sys.exit(1)
 
 
-def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool, snapshot: bool,
+def _apply_ontology(px, ontology: LocalOntology, result: PlanResult, *, prune: bool, snapshot: bool,
                    resolve_notes=None, original_id=None, id_remap=None) -> None:
-    click.echo(f'\nApplying "{project.name}"…')
+    click.echo(f'\nApplying "{ontology.name}"…')
 
-    # Create the project first if it is brand-new, and persist the id to disk.
-    if not project.id:
-        project.id = _resolve_or_create_project(px, project)
-        _persist_project_id(project)
+    # Create the ontology first if it is brand-new, and persist the id to disk.
+    if not ontology.id:
+        ontology.id = _resolve_or_create_ontology(px, ontology)
+        _persist_ontology_id(ontology)
 
-    # Record how this project's id resolved, so apps (in any project) that embed
+    # Record how this ontology's id resolved, so apps (in any ontology) that embed
     # the manifest's original id get it rewritten to the actual server id. This
-    # is what makes a project with an app portable across accounts.
-    if id_remap is not None and project.id:
-        if original_id and original_id != project.id:
-            id_remap[original_id] = project.id
-        id_remap.setdefault(project.id, project.id)
+    # is what makes a ontology with an app portable across accounts.
+    if id_remap is not None and ontology.id:
+        if original_id and original_id != ontology.id:
+            id_remap[original_id] = ontology.id
+        id_remap.setdefault(ontology.id, ontology.id)
 
     if snapshot:
         try:
-            px.create_snapshot(project.id, project.scope, "pre-apply via px")
+            px.create_snapshot(ontology.id, ontology.scope, "pre-apply via px")
             click.echo("  snapshot taken (pre-apply)")
         except Exception as exc:  # noqa: BLE001 - snapshot is best-effort safety
             click.echo(f"  {click.style('warning', fg='yellow')} snapshot failed: {exc}")
 
-    failed_ds, ds_binds = _apply_datasources(px, project, result)
+    failed_ds, ds_binds = _apply_datasources(px, ontology, result)
 
     to_write = {c.predicate for c in result.concept_changes if c.action in {"create", "update"}}
     updates = {c.predicate for c in result.concept_changes if c.action == "update"}
-    by_pred = {c.predicate: c for c in project.concepts}
+    by_pred = {c.predicate: c for c in ontology.concepts}
 
     # Save deps-before-dependents; but topo_order derives edges from body
     # predicate references and can miss a reference inside embedded SQL/Cypher
@@ -215,12 +215,12 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
         progressed = False
         for concept in pending:
             kwargs = concept_save_kwargs(concept, update=concept.predicate in updates,
-                                         datasource_binds=ds_binds, project_id=project.id)
+                                         datasource_binds=ds_binds, ontology_id=ontology.id)
             try:
                 if is_generative(concept):
-                    _save_generative_concept(project, concept, kwargs, resolve_notes)
+                    _save_generative_concept(ontology, concept, kwargs, resolve_notes)
                 else:
-                    px.save_concept(ontology_id=project.id, scope=project.scope, **kwargs)
+                    px.save_concept(ontology_id=ontology.id, scope=ontology.scope, **kwargs)
                 verb = "updated" if concept.predicate in updates else "created"
                 click.echo(f"  {verb} concept {concept.predicate}")
                 applied += 1
@@ -241,7 +241,7 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
         if deferred and not progressed:
             # These reference something that never resolves (a source defect, or a
             # dependency not part of this apply). Skip them and keep going — the
-            # rest of the project (and the ontology schema / apps) still applies;
+            # rest of the ontology (and the ontology schema / apps) still applies;
             # the skips are reported and make the apply exit non-zero.
             for concept in deferred:
                 reason = _reference_detail(last_error.get(concept.predicate, ""))
@@ -253,9 +253,9 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
             break
         pending = deferred
 
-    if result.ontology_change in {"create", "update"} and project.ontology:
+    if result.ontology_change in {"create", "update"} and ontology.ontology_schema:
         try:
-            px.save_ontology_schema(project.id, project.ontology, project.scope)
+            px.save_ontology_schema(ontology.id, ontology.ontology_schema, ontology.scope)
             verb = "created" if result.ontology_change == "create" else "updated"
             click.echo(f"  {verb} ontology schema")
         except Exception as exc:  # noqa: BLE001
@@ -266,13 +266,13 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
             )
             sys.exit(1)
 
-    _apply_apps(px, project, result, prune=prune, id_remap=id_remap)
+    _apply_apps(px, ontology, result, prune=prune, id_remap=id_remap)
 
     if prune:
         deletes = [c.predicate for c in result.concept_changes if c.action == "delete"]
         if deletes:
             try:
-                px.cleanup_concepts(project.id, project.scope, deletes)
+                px.cleanup_concepts(ontology.id, ontology.scope, deletes)
                 click.echo(f"  pruned {len(deletes)} concept(s): {', '.join(deletes)}")
             except Exception as exc:  # noqa: BLE001
                 click.echo(f"  {click.style('warning', fg='yellow')} prune failed: {exc}")
@@ -280,7 +280,7 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
     stale = {p for downstream in result.cascade.values() for p in downstream}
     click.echo(
         click.style("Applied", fg="green", bold=True)
-        + f": {applied} concept(s) written to '{project.name}'."
+        + f": {applied} concept(s) written to '{ontology.name}'."
         + (f" {len(skipped)} skipped." if skipped else "")
     )
     if failed_ds:
@@ -291,14 +291,14 @@ def _apply_project(px, project: LocalProject, result: PlanResult, *, prune: bool
 
 
 def _remap_app_project_ids(definition: dict, id_remap, owning_id=None) -> dict:
-    """Rewrite each page's ``project.id`` so the app points at the right project here.
+    """Rewrite each page's ``ontology.id`` so the app points at the right ontology here.
 
-    An app authored against one project id (e.g. on another account) embeds that
+    An app authored against one ontology id (e.g. on another account) embeds that
     id in every page; without rewriting, the server validates the app against a
-    project that doesn't exist here and every concept reference fails. Two cases:
-    - the id is in ``id_remap`` (a project applied in this run) -> use the mapping;
-    - the id is stale/foreign (not any project in this run) -> assume it means the
-      app's own project and rewrite to ``owning_id``. This covers a copy where the
+    ontology that doesn't exist here and every concept reference fails. Two cases:
+    - the id is in ``id_remap`` (a ontology applied in this run) -> use the mapping;
+    - the id is stale/foreign (not any ontology in this run) -> assume it means the
+      app's own ontology and rewrite to ``owning_id``. This covers a copy where the
       manifest id was cleared, so no old->new mapping exists.
     """
     id_remap = id_remap or {}
@@ -317,7 +317,7 @@ def _remap_app_project_ids(definition: dict, id_remap, owning_id=None) -> dict:
     return definition
 
 
-def _apply_apps(px, project: LocalProject, result: PlanResult, *, prune: bool, id_remap=None) -> None:
+def _apply_apps(px, ontology: LocalOntology, result: PlanResult, *, prune: bool, id_remap=None) -> None:
     """Create/update apps via ``save_app``; delete server-only apps with --prune.
 
     A file without an ``id`` that matched an existing app by name adopts that
@@ -327,17 +327,17 @@ def _apply_apps(px, project: LocalProject, result: PlanResult, *, prune: bool, i
     """
     import copy
 
-    by_identity = {a.identity: a for a in project.apps}
+    by_identity = {a.identity: a for a in ontology.apps}
     for change in result.app_changes:
         if change.action in {"create", "update"}:
             app = by_identity.get(change.identity)
             if app is None:
                 continue
-            definition = _remap_app_project_ids(copy.deepcopy(app.definition), id_remap, project.id)
+            definition = _remap_app_project_ids(copy.deepcopy(app.definition), id_remap, ontology.id)
             if change.server_id and not definition.get("id"):
                 definition["id"] = change.server_id
             try:
-                res = px.save_app(project.id, definition, project.scope)
+                res = px.save_app(ontology.id, definition, ontology.scope)
                 new_id = (res or {}).get("id") if isinstance(res, dict) else res
                 verb = "created" if change.action == "create" else "updated"
                 click.echo(f"  {verb} app {app.name}")
@@ -352,7 +352,7 @@ def _apply_apps(px, project: LocalProject, result: PlanResult, *, prune: bool, i
                 sys.exit(1)
         elif change.action == "delete" and prune and change.server_id:
             try:
-                px.delete_app(project.id, change.server_id, project.scope)
+                px.delete_app(ontology.id, change.server_id, ontology.scope)
                 click.echo(f"  pruned app {change.name}")
             except Exception as exc:  # noqa: BLE001
                 click.echo(f"  {click.style('warning', fg='yellow')} prune app {change.name} failed: {exc}")
@@ -376,7 +376,7 @@ def _persist_app_id(app_file: Path, app_id: str) -> None:
     app_file.write_text(yaml.safe_dump(reordered, sort_keys=False, allow_unicode=True), "utf-8")
 
 
-def _save_generative_concept(project: LocalProject, concept, kwargs: dict, resolve_notes) -> None:
+def _save_generative_concept(ontology: LocalOntology, concept, kwargs: dict, resolve_notes) -> None:
     """Save a context or llm concept with its ``concept_config``.
 
     The SDK's ``save_concept`` does not forward ``concept_config``, so this posts
@@ -414,7 +414,7 @@ def _save_generative_concept(project: LocalProject, concept, kwargs: dict, resol
 
     payload = {
         "definition": kwargs.get("definition") or "",
-        "scope": project.scope,
+        "scope": ontology.scope,
         "concept_type": kwargs["concept_type"],
         "concept_name": kwargs.get("concept_name") or concept.predicate,
         "output_predicate": kwargs.get("output_predicate", ""),
@@ -428,10 +428,10 @@ def _save_generative_concept(project: LocalProject, concept, kwargs: dict, resol
     if config is not None:
         payload["concept_config"] = config
 
-    JarvisPyClient._request("POST", f"/api/v1/concepts/{project.id}/save", json=payload)
+    JarvisPyClient._request("POST", f"/api/v1/concepts/{ontology.id}/save", json=payload)
 
 
-def _apply_datasources(px, project: LocalProject, result: PlanResult):
+def _apply_datasources(px, ontology: LocalOntology, result: PlanResult):
     """Connect datasources the plan marks as create (upload local files first).
 
     A datasource failure is reported and skipped, not fatal: concepts are the
@@ -450,14 +450,14 @@ def _apply_datasources(px, project: LocalProject, result: PlanResult):
             click.echo(f"  reusing existing datasource {change.name}")
     to_connect = [d.name for d in result.datasource_changes if d.action == "create"]
     for name in to_connect:
-        spec = project.datasources.get(name)
+        spec = ontology.datasources.get(name)
         if not spec:
             continue
         type_ = spec.get("type", "")
         filename = None
         try:
             if is_file_based(type_) and spec.get("file"):
-                kwargs, filename = _upload_and_kwargs(px, project, name, spec)
+                kwargs, filename = _upload_and_kwargs(px, ontology, name, spec)
                 click.echo(f"  uploaded + connecting file datasource {name}")
             else:
                 resolved = resolve_secrets(spec, os.environ)
@@ -468,7 +468,7 @@ def _apply_datasources(px, project: LocalProject, result: PlanResult):
                 filename = _single_table(spec)
                 click.echo(f"  connecting datasource {name} ({type_})")
             db = px.Database(**kwargs)
-            connected = px.connect_sources(db, scope=project.scope)
+            connected = px.connect_sources(db, scope=ontology.scope)
             template = bind_template_from_sources((connected or {}).get("sources"), filename)
             if template:
                 ds_binds[name] = template
@@ -514,9 +514,9 @@ def _single_table(spec: dict):
     return None
 
 
-def _upload_and_kwargs(px, project: LocalProject, name: str, spec: dict):
-    ds_file = project.datasource_paths.get(name)
-    base = ds_file.parent if ds_file else (project.directory or Path.cwd())
+def _upload_and_kwargs(px, ontology: LocalOntology, name: str, spec: dict):
+    ds_file = ontology.datasource_paths.get(name)
+    base = ds_file.parent if ds_file else (ontology.directory or Path.cwd())
     local = (base / spec["file"]).resolve()
     if not local.is_file():
         raise FileNotFoundError(f"local file not found: {local}")
@@ -536,58 +536,58 @@ def _upload_and_kwargs(px, project: LocalProject, name: str, spec: dict):
     return file_database_kwargs(spec["type"], disk_path, filename), filename
 
 
-def _resolve_or_create_project(px, project: LocalProject) -> str:
-    """Adopt an existing same-name project in scope, else create a new one.
+def _resolve_or_create_ontology(px, ontology: LocalOntology) -> str:
+    """Adopt an existing same-name ontology in scope, else create a new one.
 
-    Reconcile-on-create: if a previous apply created the project on the server
+    Reconcile-on-create: if a previous apply created the ontology on the server
     but its id was never persisted back to the manifest (process killed in the
     window, or the write-back failed), the manifest is still id-less. Creating
-    unconditionally would then duplicate the project on every retry. So first
-    look for a single same-name project in scope and adopt its id; only create
+    unconditionally would then duplicate the ontology on every retry. So first
+    look for a single same-name ontology in scope and adopt its id; only create
     when there is no existing match.
     """
     try:
-        existing = [p for p in (px.list_ontologies([project.scope]) or [])
-                    if p.get("name") == project.name]
+        existing = [p for p in (px.list_ontologies([ontology.scope]) or [])
+                    if p.get("name") == ontology.name]
     except Exception:  # noqa: BLE001 - listing is best-effort; fall back to create
         existing = []
 
     if len(existing) == 1:
         pid = str(existing[0].get("id"))
-        click.echo(f"  adopted existing project {pid} (same name in scope — no duplicate created)")
+        click.echo(f"  adopted existing ontology {pid} (same name in scope — no duplicate created)")
         return pid
     if len(existing) > 1:
         click.echo(
-            f"  {click.style('warning', fg='yellow')} {len(existing)} projects already named "
-            f"'{project.name}'; creating a new one (can't disambiguate — set project.id to target one)"
+            f"  {click.style('warning', fg='yellow')} {len(existing)} ontologies already named "
+            f"'{ontology.name}'; creating a new one (can't disambiguate — set ontology.id to target one)"
         )
     try:
-        pid = px.save_ontology(None, project.name, project.scope)
-        click.echo(f"  created project {pid}")
+        pid = px.save_ontology(None, ontology.name, ontology.scope)
+        click.echo(f"  created ontology {pid}")
         return pid
     except Exception as exc:  # noqa: BLE001
         click.echo(
             click.style("FAIL", fg="red", bold=True)
-            + f": could not create project '{project.name}': {exc}",
+            + f": could not create ontology '{ontology.name}': {exc}",
             err=True,
         )
         sys.exit(1)
 
 
-def _persist_project_id(project: LocalProject) -> None:
+def _persist_ontology_id(ontology: LocalOntology) -> None:
     import yaml
 
-    path = project.manifest_path
+    path = ontology.manifest_path
     if not path or not path.is_file():
         return
     try:
         data = yaml.safe_load(path.read_text("utf-8")) or {}
-        data.setdefault("project", {})["id"] = project.id
+        data.setdefault("ontology", {})["id"] = ontology.id
         path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), "utf-8")
     except Exception as exc:  # noqa: BLE001 - a failed write-back must NOT crash apply
         # The id is safe on the server and reconcile-on-create recovers it on the
         # next run; warn loudly so the user can persist it manually if they want.
         click.echo(
-            f"  {click.style('warning', fg='yellow')} could not write project id back to "
-            f"{path}: {exc}. Re-running apply will adopt the existing project (no duplicate)."
+            f"  {click.style('warning', fg='yellow')} could not write ontology id back to "
+            f"{path}: {exc}. Re-running apply will adopt the existing ontology (no duplicate)."
         )

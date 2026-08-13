@@ -18,8 +18,8 @@ _SPEC = "https://openlineage.io/spec/1-0-5/OpenLineage.json"
 _RUN_EVENT_SCHEMA = f"{_SPEC}#/$defs/RunEvent"
 
 
-def dataset_namespace(project_id: Optional[str], slug: str) -> str:
-    return f"prometheux://{project_id or slug}"
+def dataset_namespace(ontology_id: Optional[str], slug: str) -> str:
+    return f"prometheux://{ontology_id or slug}"
 
 
 def concept_datasets(
