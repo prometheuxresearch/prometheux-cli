@@ -18,7 +18,10 @@ dependencies = [
     "click>=8.1",
     "PyYAML>=6.0",
     "jsonschema>=4.18",
-    "prometheux_chain>=0.3.1",
+    # 0.3.2 is the floor because earlier releases call the retired
+    # /ontologies/export-project and /import-project aliases, which the backend
+    # no longer serves — pull/plan/apply would 404 against a current pod.
+    "prometheux_chain>=0.3.2",
 ]
 
 [project.optional-dependencies]
