@@ -1,6 +1,6 @@
 # Continuous context ingestion
 
-Watch a folder and stream every new markdown file into a project's **context layer** as a note —
+Watch a folder and stream every new markdown file into an ontology's **context layer** as a note —
 a simple model for continuous document ingestion (drop a doc, it shows up as context on the
 platform).
 
@@ -12,34 +12,34 @@ platform).
 
 ## Run
 
-Context notes attach to an **existing project**, so create one first and grab its id — run one of
-the other examples, or create a project in the app.
+Context notes attach to an **existing ontology**, so create one first and grab its id — run one of
+the other examples, or create an ontology in the app.
 
 Terminal 1 — generate notes:
 ```bash
 ./gen-notes.sh
 ```
 
-Terminal 2 — watch + push (first run needs the project id):
+Terminal 2 — watch + push (first run needs the ontology id):
 ```bash
 export JARVISPY_URL="https://api.prometheux.ai/jarvispy/<org>/<user>"
 export PMTX_TOKEN="<your JWT>"
-export ONTOLOGY_ID="<your project id>"
+export ONTOLOGY_ID="<your ontology id>"
 ./watch-push.sh
 ```
 
-After the first run the id is saved in `workspace/projects/ctx/prometheux.yaml`, so later runs
+After the first run the id is saved in `workspace/ontologies/ctx/prometheux.yaml`, so later runs
 don't need `ONTOLOGY_ID`.
 
 ## Verify
 
-Open that project in the app → **Context** page. Each note's text should match a local file:
+Open that ontology in the app → **Context** page. Each note's text should match a local file:
 ```
-workspace/projects/ctx/context/note-*.md
+workspace/ontologies/ctx/context/note-*.md
 ```
 
 ## Notes
 
 - Faster cadence: `./gen-notes.sh <dir> 3` and `./watch-push.sh 2`.
-- Nothing is deleted. To reset: remove `workspace/projects/ctx/context/note-*.md`,
+- Nothing is deleted. To reset: remove `workspace/ontologies/ctx/context/note-*.md`,
   `notes.context.md`, and `workspace/.px/context-state.json`.

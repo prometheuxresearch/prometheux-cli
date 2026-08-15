@@ -66,7 +66,7 @@ def init(directory: Path, name: str, force: bool) -> None:
     )
     click.echo("\nNext:")
     click.echo("  1. Read AGENTS.md")
-    click.echo("  2. Edit the example under projects/example/")
+    click.echo("  2. Edit the example under ontologies/example/")
     click.echo("  3. Run `px validate`")
 
 

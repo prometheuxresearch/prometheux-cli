@@ -22,12 +22,12 @@ class _FakePx:
 def _workspace(tmp_path: Path):
     (tmp_path / "context").mkdir()
     (tmp_path / "prometheux.workspace.yaml").write_text(
-        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/p\n"
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies:\n  - ./ontologies/p\n"
     )
-    c = tmp_path / "projects" / "p" / "concepts"
+    c = tmp_path / "ontologies" / "p" / "concepts"
     c.mkdir(parents=True)
-    (tmp_path / "projects" / "p" / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nproject:\n  id: pid1\n  name: P\n  scope: user\nconcepts: ./concepts\n"
+    (tmp_path / "ontologies" / "p" / "prometheux.yaml").write_text(
+        "schemaVersion: 1\nontology:\n  id: pid1\n  name: P\n  scope: user\nconcepts: ./concepts\n"
     )
     (c / "customer.vadalog").write_text("customer(1).\n")
     (c / "customer.meta.yaml").write_text("conceptType: logic\noutputPredicate: customer\n")

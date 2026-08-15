@@ -26,7 +26,7 @@ def test_pull_writes_and_validates(tmp_path: Path, export_dict, monkeypatch):
     runner = CliRunner()
     result = runner.invoke(cli, ["pull", "abc123", "--out", str(tmp_path)])
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "projects" / "al-dente-supply-chain" / "concepts" / "customer.vadalog").is_file()
+    assert (tmp_path / "ontologies" / "al-dente-supply-chain" / "concepts" / "customer.vadalog").is_file()
     assert (tmp_path / "prometheux.workspace.yaml").is_file()
     assert (tmp_path / ".px" / "schemas" / "workspace.schema.json").is_file()
 

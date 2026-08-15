@@ -67,7 +67,7 @@ class ContextNote:
 class Endpoint:
     kind: str           # "note" | "concept"
     note_key: Optional[RefKey] = None   # set when kind == "note"
-    concept_id: Optional[str] = None    # "<project_id>:<predicate>" when kind == "concept"
+    concept_id: Optional[str] = None    # "<ontology_id>:<predicate>" when kind == "concept"
 
 
 @dataclass
@@ -93,13 +93,13 @@ def _is_within(path: Path, parent: Path) -> bool:
         return False
 
 
-def _owning_project(manifest: Path, projects):
+def _owning_ontology(manifest: Path, ontologies):
     best, best_len = None, -1
-    for p in projects:
-        if p.directory and _is_within(manifest, p.directory):
-            length = len(str(p.directory.resolve()))
+    for o in ontologies:
+        if o.directory and _is_within(manifest, o.directory):
+            length = len(str(o.directory.resolve()))
             if length > best_len:
-                best, best_len = p, length
+                best, best_len = o, length
     return best
 
 
@@ -126,9 +126,9 @@ def collect_context(workspace) -> Tuple[List[ContextNote], List[ContextLink], Li
 
         scope_id = None
         if scope == "project":
-            owner = _owning_project(manifest, workspace.projects)
+            owner = _owning_ontology(manifest, workspace.ontologies)
             if owner is None or not owner.id:
-                warnings.append(f"{rel}: project-scoped but owning project has no server id; skipped")
+                warnings.append(f"{rel}: project-scoped but owning ontology has no server id; skipped")
                 continue
             scope_id = owner.id
 
@@ -159,18 +159,18 @@ def collect_context(workspace) -> Tuple[List[ContextNote], List[ContextLink], Li
 
 
 def _endpoint(ref, key_by_path, scope_id) -> Optional[Endpoint]:
-    """Resolve a link endpoint: a body path (note) or `concept:[<project>:]<predicate>`."""
+    """Resolve a link endpoint: a body path (note) or `concept:[<ontology>:]<predicate>`."""
     if not isinstance(ref, str):
         return None
     if ref.startswith("concept:"):
         rest = ref[len("concept:"):]
         if ":" in rest:
-            project, predicate = rest.split(":", 1)
+            ontology, predicate = rest.split(":", 1)
         else:
-            project, predicate = scope_id, rest
-        if not project or not predicate:
+            ontology, predicate = scope_id, rest
+        if not ontology or not predicate:
             return None
-        return Endpoint("concept", concept_id=f"{project}:{predicate}")
+        return Endpoint("concept", concept_id=f"{ontology}:{predicate}")
     if ref in key_by_path:
         return Endpoint("note", note_key=key_by_path[ref])
     return None

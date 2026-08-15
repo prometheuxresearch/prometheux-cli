@@ -108,19 +108,19 @@ def validate_workspace(root: Path) -> Report:
     elif "context" in ws:
         report.error(_rel(root, ws_file), f"context vault not found: {_rel(root, ctx_dir)}")
 
-    # Projects.
-    for proj_ref in ws.get("projects", []) or []:
-        proj_dir = (root / proj_ref).resolve()
-        _validate_project(root, proj_dir, report)
+    # Ontologies.
+    for onto_ref in ws.get("ontologies", []) or []:
+        onto_dir = (root / onto_ref).resolve()
+        _validate_ontology(root, onto_dir, report)
 
     return report
 
 
-def _validate_project(root: Path, proj_dir: Path, report: Report) -> None:
-    manifest = proj_dir / "prometheux.yaml"
+def _validate_ontology(root: Path, onto_dir: Path, report: Report) -> None:
+    manifest = onto_dir / "prometheux.yaml"
     loc = _rel(root, manifest)
     if not manifest.is_file():
-        report.error(_rel(root, proj_dir), "missing prometheux.yaml")
+        report.error(_rel(root, onto_dir), "missing prometheux.yaml")
         return
     try:
         proj = load_yaml(manifest)
@@ -128,36 +128,36 @@ def _validate_project(root: Path, proj_dir: Path, report: Report) -> None:
         report.error(loc, str(exc))
         return
 
-    for msg in _schema_errors("project", proj):
+    for msg in _schema_errors("ontology", proj):
         report.error(loc, msg)
-    report.bump("project")
+    report.bump("ontology")
 
-    datasource_names = _validate_datasources(root, proj_dir, proj, report)
-    concepts_dir = proj_dir / (proj.get("concepts") or "./concepts")
+    datasource_names = _validate_datasources(root, onto_dir, proj, report)
+    concepts_dir = onto_dir / (proj.get("concepts") or "./concepts")
     concept_count = _validate_concepts(root, concepts_dir, datasource_names, report)
 
-    # Ontology file existence (schema for it is out of scope for this slice).
-    if proj.get("ontology"):
-        onto = proj_dir / proj["ontology"]
+    # Ontology schema graph file existence (schema for it is out of scope here).
+    if proj.get("ontologySchema"):
+        onto = onto_dir / proj["ontologySchema"]
         if not onto.is_file():
-            report.error(loc, f"ontology file not found: {_rel(root, onto)}")
+            report.error(loc, f"ontology schema file not found: {_rel(root, onto)}")
         else:
             _warn_hollow_ontology(root, onto, concept_count, loc, report)
 
-    # Project-scoped context vault.
+    # Ontology-scoped context vault.
     if proj.get("context"):
-        pctx = proj_dir / proj["context"]
+        pctx = onto_dir / proj["context"]
         if pctx.is_dir():
             _validate_context_vault(root, pctx, report)
         else:
-            report.error(loc, f"project context vault not found: {_rel(root, pctx)}")
+            report.error(loc, f"ontology context vault not found: {_rel(root, pctx)}")
 
 
 def _warn_hollow_ontology(root: Path, onto: Path, concept_count: int, loc: str, report: Report) -> None:
-    """Warn when a project ships an ontology schema graph but has no concepts.
+    """Warn when an ontology ships a schema graph but has no concepts.
 
     In Prometheux the ontology is concept-centric: the platform's default
-    ontology view is the concept-lineage graph, so a project with 0 concepts
+    ontology view is the concept-lineage graph, so an ontology with 0 concepts
     renders an EMPTY ontology no matter what the schema graph contains. Such a
     concept-less schema is a hollow artifact — flag it rather than silently
     creating a useless ontology.
@@ -172,10 +172,10 @@ def _warn_hollow_ontology(root: Path, onto: Path, concept_count: int, loc: str, 
         return
     node_count = len(onto_data.get("nodes") or [])
     if node_count == 0:
-        return  # an empty schema on an empty project is fine (nothing to render)
+        return  # an empty schema on an empty ontology is fine (nothing to render)
     report.warn(
         loc,
-        f"ontology schema declares {node_count} node(s) but the project has no concepts; "
+        f"ontology schema declares {node_count} node(s) but the ontology has no concepts; "
         "the platform renders the ontology from concept lineage, so this will show as EMPTY. "
         "Import the graph as concepts bound to data (or add concepts), or drop the ontology.",
     )
@@ -296,7 +296,7 @@ def _validate_context_concept(
     for msg in _schema_errors("context-concept", data):
         report.error(loc, msg)
     # static note paths are resolved by `apply` against the vault; existence
-    # under the project vault is checked there, not here.
+    # under the ontology vault is checked there, not here.
     _register_predicate(data.get("outputPredicate"), loc, seen, report)
     report.bump("concept")
 

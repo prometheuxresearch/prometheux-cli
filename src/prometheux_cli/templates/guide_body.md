@@ -75,7 +75,7 @@ A datasource file (`datasources/*.yaml`) is one of two shapes:
 A concept reads from a datasource via an input bind in its `.meta.yaml` (`binds.input`),
 referencing the datasource `name`. `px apply` reuses a connection that already exists on the
 account (matched by type/host/port/table) instead of re-connecting, so re-applying is
-idempotent and a project can point at a shared, pre-existing datasource.
+idempotent and an ontology can point at a shared, pre-existing datasource.
 
 ## Context conventions
 
@@ -90,7 +90,7 @@ idempotent and a project can point at a shared, pre-existing datasource.
 
 ## Workflow
 
-1. `px init` scaffolds a workspace skeleton (schemas, an example project, this guide).
+1. `px init` scaffolds a workspace skeleton (schemas, an example ontology, this guide).
 2. Author files — concept bodies + `*.meta.yaml`, datasources, context manifests + bodies.
 3. `px validate` — offline schema + structural checks. Loop until it passes.
 4. `px plan` — reads the server state and shows create/update/replace + the downstream
@@ -103,8 +103,8 @@ idempotent and a project can point at a shared, pre-existing datasource.
   environment at apply.
 - Hand-write lineage edges, or bind a predicate that another concept produces.
 - Author `derived_from` context links.
-- Reference predicates across projects (v1 concepts refer only within their own lineage;
-  the only cross-project sharing is `scope: global` context).
+- Reference predicates across ontologies (v1 concepts refer only within their own lineage;
+  the only cross-ontology sharing is `scope: global` context).
 
 ## Vadalog gotchas (so you don't rediscover them)
 

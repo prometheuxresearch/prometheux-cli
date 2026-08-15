@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.prometheux.ai/workspace.schema.json",
   "title": "Prometheux workspace manifest",
-  "description": "prometheux.workspace.yaml — one git repo = one workspace: a shared context vault plus many projects.",
+  "description": "prometheux.workspace.yaml — one git repo = one workspace: a shared context vault plus many ontologies.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "workspace", "projects"],
+  "required": ["schemaVersion", "workspace", "ontologies"],
   "properties": {
     "$schema": { "type": "string" },
     "schemaVersion": { "type": "integer", "const": 1 },
@@ -22,9 +22,9 @@
       "description": "Path to the shared global-scope context vault, relative to this file.",
       "default": "./context"
     },
-    "projects": {
+    "ontologies": {
       "type": "array",
-      "description": "Relative paths to each project directory (containing a prometheux.yaml).",
+      "description": "Relative paths to each ontology directory (containing a prometheux.yaml).",
       "items": { "type": "string", "minLength": 1 },
       "minItems": 1
     }

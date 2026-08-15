@@ -1,4 +1,4 @@
-"""Turn a project export dict into an on-disk file tree.
+"""Turn an ontology export dict into an on-disk file tree.
 
 The export shape (from prometheux_chain ``export_ontology``) is::
 
@@ -69,8 +69,8 @@ class FileOut:
 
 @dataclass
 class ReshapeResult:
-    project_id: str
-    project_name: str
+    ontology_id: str
+    ontology_name: str
     scope: str
     files: List[FileOut] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
@@ -132,8 +132,8 @@ def _fields_to_list(raw) -> List[dict]:
     return []
 
 
-def reshape_project(export: dict, project_name: str, slug: str, sources: dict = None) -> ReshapeResult:
-    """Build the file set for ``projects/<slug>/`` from an export dict.
+def reshape_ontology(export: dict, ontology_name: str, slug: str, sources: dict = None) -> ReshapeResult:
+    """Build the file set for ``ontologies/<slug>/`` from an export dict.
 
     ``sources`` maps a predicate to its recovered sql/cypher source query (from
     ``list_concepts`` parsed.code); when present, a sql/cypher concept's body
@@ -143,20 +143,21 @@ def reshape_project(export: dict, project_name: str, slug: str, sources: dict = 
 
     sources = sources or {}
 
-    project_id = export.get("project_id", "")
+    # `project_id` / `projects_` are the server export's wire names — unchanged.
+    ontology_id = export.get("project_id", "")
     scope = export.get("scope", "user")
-    result = ReshapeResult(project_id=project_id, project_name=project_name, scope=scope)
-    base = f"projects/{slug}"
+    result = ReshapeResult(ontology_id=ontology_id, ontology_name=ontology_name, scope=scope)
+    base = f"ontologies/{slug}"
 
-    # --- project manifest -------------------------------------------------
-    proj_rows = _rows(_table(export, "projects_"))
-    name = project_name
-    if proj_rows:
-        name = proj_rows[0].get("name") or project_name
+    # --- ontology manifest ------------------------------------------------
+    onto_rows_meta = _rows(_table(export, "projects_"))
+    name = ontology_name
+    if onto_rows_meta:
+        name = onto_rows_meta[0].get("name") or ontology_name
     manifest = {
-        "$schema": "../../.px/schemas/project.schema.json",
+        "$schema": "../../.px/schemas/ontology.schema.json",
         "schemaVersion": 1,
-        "project": {"id": project_id, "name": name, "scope": scope},
+        "ontology": {"id": ontology_id, "name": name, "scope": scope},
         "concepts": "./concepts",
     }
     datasource_rows = _rows(_table(export, "datasources_"))
@@ -166,7 +167,7 @@ def reshape_project(export: dict, project_name: str, slug: str, sources: dict = 
             for i, r in enumerate(datasource_rows)
         ]
     if _rows(_table(export, "ontology_schema_")):
-        manifest["ontology"] = "./ontology/schema.yaml"
+        manifest["ontologySchema"] = "./ontology/schema.yaml"
     result.add(f"{base}/prometheux.yaml", _yaml(yaml, manifest))
 
     # --- datasources ------------------------------------------------------

@@ -15,7 +15,7 @@ from typing import List, Optional
 
 import click
 
-from ..loader import LocalProject, load_workspace, select_projects
+from ..loader import LocalOntology, load_workspace, select_ontologies
 from ..openlineage import concept_datasets, dataset_namespace, make_run_event
 from ..sdk import SdkError, connected_sdk
 from ..validation import find_workspace_root
@@ -39,8 +39,8 @@ def _ssl_context_from_env() -> Optional[ssl.SSLContext]:
 @click.command()
 @click.argument("concept")
 @click.argument("path", required=False, type=click.Path(exists=True, file_okay=False, path_type=Path))
-@click.option("--project", "-p", "project_selectors", multiple=True,
-              help="Limit the search to the named project(s). Repeatable.")
+@click.option("--ontology", "-o", "ontology_selectors", multiple=True,
+              help="Limit the search to the named ontology(s). Repeatable.")
 @click.option("--param", "params", multiple=True, metavar="KEY=VALUE",
               help="Run parameter (repeatable).")
 @click.option("--persist", is_flag=True, help="Persist (materialize) the concept's outputs.")
@@ -49,7 +49,7 @@ def _ssl_context_from_env() -> Optional[ssl.SSLContext]:
 @click.option("--openlineage-url", "ol_url", default=None,
               help="Also POST each OpenLineage event to this URL (e.g. a Marquez /api/v1/lineage).")
 @click.option("--no-openlineage", is_flag=True, help="Do not emit OpenLineage events.")
-def run(concept, path, project_selectors, params, persist, ol_file, ol_url, no_openlineage):
+def run(concept, path, ontology_selectors, params, persist, ol_file, ol_url, no_openlineage):
     """Run CONCEPT (an output predicate) and emit OpenLineage lineage events."""
     start = path or Path.cwd()
     root = find_workspace_root(start)
@@ -68,19 +68,19 @@ def run(concept, path, project_selectors, params, persist, ol_file, ol_url, no_o
         sys.exit(1)
 
     workspace = load_workspace(root)
-    projects, unknown = select_projects(workspace.projects, project_selectors)
+    ontologies, unknown = select_ontologies(workspace.ontologies, ontology_selectors)
     if unknown:
-        click.echo(click.style("FAIL", fg="red", bold=True) + f": unknown project(s): {', '.join(unknown)}", err=True)
+        click.echo(click.style("FAIL", fg="red", bold=True) + f": unknown ontology(s): {', '.join(unknown)}", err=True)
         sys.exit(2)
 
-    project, local_concept = _resolve_concept(projects, concept)
-    if project is None:
+    ontology, local_concept = _resolve_concept(ontologies, concept)
+    if ontology is None:
         click.echo(click.style("FAIL", fg="red", bold=True) + f": concept '{concept}' not found in the workspace.", err=True)
         sys.exit(1)
-    if project.id is None:
+    if ontology.id is None:
         click.echo(
             click.style("FAIL", fg="red", bold=True)
-            + f": project '{project.name}' has no server id yet — run `px apply` first.",
+            + f": ontology '{ontology.name}' has no server id yet — run `px apply` first.",
             err=True,
         )
         sys.exit(1)
@@ -90,16 +90,16 @@ def run(concept, path, project_selectors, params, persist, ol_file, ol_url, no_o
         file_path=(ol_file or (root / ".px" / "openlineage.jsonl")),
         url=ol_url,
     )
-    ns = dataset_namespace(project.id, project.slug)
-    outputs_local = {c.predicate for c in project.concepts}
+    ns = dataset_namespace(ontology.id, ontology.slug)
+    outputs_local = {c.predicate for c in ontology.concepts}
     inputs, outputs = concept_datasets(local_concept, outputs_local, ns)
     run_id = uuid.uuid4().hex
-    job_name = f"{project.slug}.{concept}"
+    job_name = f"{ontology.slug}.{concept}"
 
     emitter.emit("START", run_id, job_name, inputs, outputs)
     try:
         px.run_concept(
-            project.id, concept, scope=project.scope,
+            ontology.id, concept, scope=ontology.scope,
             params=_parse_params(params), persist_outputs=persist,
         )
     except Exception as exc:  # noqa: BLE001
@@ -109,18 +109,18 @@ def run(concept, path, project_selectors, params, persist, ol_file, ol_url, no_o
         sys.exit(1)
 
     emitter.emit("COMPLETE", run_id, job_name, inputs, outputs)
-    click.echo(click.style("Ran", fg="green", bold=True) + f" concept '{concept}' in '{project.name}'.")
+    click.echo(click.style("Ran", fg="green", bold=True) + f" concept '{concept}' in '{ontology.name}'.")
     emitter.report()
 
 
-def _resolve_concept(projects: List[LocalProject], predicate: str):
-    matches = [(p, c) for p in projects for c in p.concepts if c.predicate == predicate]
+def _resolve_concept(ontologies: List[LocalOntology], predicate: str):
+    matches = [(p, c) for p in ontologies for c in p.concepts if c.predicate == predicate]
     if not matches:
         return None, None
     if len(matches) > 1:
         names = ", ".join(sorted({p.name for p, _ in matches}))
         raise click.ClickException(
-            f"concept '{predicate}' exists in multiple projects ({names}); use --project."
+            f"concept '{predicate}' exists in multiple ontologies ({names}); use --ontology."
         )
     return matches[0]
 
