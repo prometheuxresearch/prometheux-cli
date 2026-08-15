@@ -47,3 +47,26 @@ def connected_sdk(*, require_token: bool = True):
     px = load_sdk()
     url, token = configure(px, require_token=require_token)
     return px, url, token
+
+
+def rest_data(method: str, path: str, *, json=None, params=None):
+    """Call a JarvisPy REST route directly and return its ``data`` payload.
+
+    For the handful of platform operations the SDK exposes no convenience method
+    for (policy runs, app publish, concept SQL query, …). Assumes the SDK has
+    already been configured this process (call :func:`connected_sdk` first, which
+    the CLI does). Raises :class:`SdkError` on the ``{status:"error"}`` envelope.
+    """
+    from prometheux_chain.client.jarvispy_client import JarvisPyClient
+
+    try:
+        resp = JarvisPyClient._request(method, path, json=json, params=params)
+    except SdkError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - the client raises bare Exceptions on HTTP errors
+        raise SdkError(str(exc)) from exc
+    if isinstance(resp, dict):
+        if resp.get("status") == "error":
+            raise SdkError(resp.get("message") or f"{method} {path} failed")
+        return resp.get("data")
+    return resp

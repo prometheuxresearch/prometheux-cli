@@ -15,7 +15,7 @@ itself is the annotated template — you can read exactly what each file should 
 | [`csv-to-knowledge-graph/`](csv-to-knowledge-graph/) | Cold start: drop CSVs → concepts → a queryable graph you can `px run`. |
 | [`gitops-sync/`](gitops-sync/) | Files as the source of truth: `plan`/`apply`, idempotency, the downstream re-run cascade, and safe delete with `--prune`. |
 | [`import-graph/`](import-graph/) | Import an external property graph (node/edge CSVs) **as concepts** + a type ontology — the way that actually renders on the platform. |
-| [`continuous-context/`](continuous-context/) | Watch a folder and push each new markdown file to a project's **context layer** as a note (`px context apply` in a loop). |
+| [`continuous-context/`](continuous-context/) | Watch a folder and push each new markdown file to an ontology's **context layer** as a note (`px context apply` in a loop). |
 
 ## Prerequisites (all examples)
 
@@ -36,8 +36,8 @@ itself is the annotated template — you can read exactly what each file should 
 - The scripts author their workspace into a local `./workspace/` on first run and reuse it after,
   so re-running is idempotent (a fresh `apply` reports "No changes"). Delete `./workspace/` to
   start over.
-- Applying an example **creates a project on your account**. Clean it up when done:
+- Applying an example **creates an ontology on your account**. Clean it up when done:
   ```bash
-  px delete "<project name>" -y
+  px delete "<ontology name>" -y
   ```
 - Examples that use CSV file datasources require the account's Data Manager service (file upload).

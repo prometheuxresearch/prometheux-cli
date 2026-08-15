@@ -6,7 +6,7 @@ from prometheux_cli.loader import load_workspace
 
 def _ws(tmp_path: Path):
     (tmp_path / "prometheux.workspace.yaml").write_text(
-        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects:\n  - ./projects/p\n"
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies:\n  - ./ontologies/p\n"
     )
     ctx = tmp_path / "context" / "facts"
     ctx.mkdir(parents=True)
@@ -18,10 +18,10 @@ def _ws(tmp_path: Path):
     (ctx / "a.md").write_text("# Segment A\nAlpha details.\n")
     (ctx / "b.md").write_text("# Segment B\nBeta details.\n")
 
-    proj = tmp_path / "projects" / "p"
+    proj = tmp_path / "ontologies" / "p"
     (proj / "context").mkdir(parents=True)
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nproject:\n  id: pid1\n  name: P\n  scope: user\ncontext: ./context\n"
+        "schemaVersion: 1\nontology:\n  id: pid1\n  name: P\n  scope: user\ncontext: ./context\n"
     )
     (proj / "context" / "domain.context.md").write_text(
         "---\nscope: project\nactivation: always\nkind: rule\nnotes:\n  - policy.md\n"
@@ -63,7 +63,7 @@ def test_collect_context(tmp_path: Path):
 
 def test_collect_context_missing_body_warns(tmp_path: Path):
     (tmp_path / "prometheux.workspace.yaml").write_text(
-        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nprojects: []\n"
+        "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies: []\n"
     )
     c = tmp_path / "context"
     c.mkdir()

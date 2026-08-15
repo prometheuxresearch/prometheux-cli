@@ -6,7 +6,7 @@ Neo4j / CSV shape). This example imports it into Prometheux.
 ## The key lesson
 
 A Prometheux ontology is **concept-centric** — the platform draws it from concept *lineage*. So
-writing a bare `ontology_schema` into an *empty* project shows up **empty** in the UI (and `px
+writing a bare `ontology_schema` into an *empty* ontology shows up **empty** in the UI (and `px
 validate` will warn you: "concept-less ontology… will show as EMPTY"). The real import path is to
 ingest the external nodes/edges **as concepts**, which populates the lineage; a type ontology on
 top is then meaningful.
@@ -14,7 +14,7 @@ top is then meaningful.
 ## What `run.sh` authors
 
 ```
-projects/graph/
+ontologies/graph/
   files/           nodes.csv, edges.csv           (the external export)
   datasources/     nodes_csv, edges_csv
   concepts/
@@ -38,8 +38,8 @@ export PMTX_TOKEN="<your JWT>"
 
 - **Lineage view**: `nodes.csv → graph_node`, `edges.csv → graph_edge`, both → `edge_enriched`.
 - **Ontology → Schema tab**: the `company / person / product` type graph.
-- Because the project has concepts, `validate` does **not** warn about a hollow ontology — contrast
-  with importing only a type graph into an empty project.
+- Because the ontology has concepts, `validate` does **not** warn about a hollow ontology schema — contrast
+  with importing only a type graph into an empty ontology.
 
 ## Clean up
 

@@ -6,7 +6,7 @@ concepts on the platform.
 `run.sh` authors this workspace (into `./workspace`) and then runs the core `px` loop:
 
 ```
-projects/customers/
+ontologies/customers/
   files/           customers.csv, orders.csv     (the raw data)
   datasources/     customers_csv, orders_csv      (one file per datasource)
   concepts/
@@ -23,7 +23,7 @@ export PMTX_TOKEN="<your JWT>"
 ./run.sh
 ```
 
-What it does: `px validate` (offline) → `px plan` (preview) → `px apply` (creates the project,
+What it does: `px validate` (offline) → `px plan` (preview) → `px apply` (creates the ontology,
 uploads + connects the CSVs, saves the concepts) → `px run customer_order --persist`.
 
 ## What to look at
@@ -31,8 +31,8 @@ uploads + connects the CSVs, saves the concepts) → `px run customer_order --pe
 - Open **Customers Example** in the app — you'll see the lineage `customer` + `order → customer_order`.
 - The `.meta.yaml` files are the "envelope" (output predicate, group, input binds); the `.vadalog`
   files are the concept bodies. Edges between concepts are **derived** from body references.
-- Re-run `./run.sh` — `px plan` now reports **No changes** (idempotent). The project id was written
-  back into `projects/customers/prometheux.yaml` on the first apply.
+- Re-run `./run.sh` — `px plan` now reports **No changes** (idempotent). The ontology id was written
+  back into `ontologies/customers/prometheux.yaml` on the first apply.
 
 ## Clean up
 

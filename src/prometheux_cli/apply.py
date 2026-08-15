@@ -23,22 +23,22 @@ from typing import Dict, List, Optional
 from .loader import LocalConcept
 
 _BIND_PRED_RE = re.compile(r'@q?bind\(\s*"([^"]+)"')
-# The project-id segment of a concept-output (parquet) results path.
+# The ontology-id segment of a concept-output (parquet) results path.
 _RESULTS_RE = re.compile(r'(disk/results/)[^/"\'\\]+')
 
 
-def rewrite_results_project_id(annotation: str, project_id: str) -> str:
-    """Point a ``disk/results/<id>/…`` path at the current project.
+def rewrite_results_ontology_id(annotation: str, ontology_id: str) -> str:
+    """Point a ``disk/results/<id>/…`` path at the current ontology.
 
     A concept that reads a sibling concept's materialized output carries an input
     bind like ``@bind("up","parquet","disk/results/<oldid>","up")``. On another
-    project/account that ``<oldid>`` is wrong — the sibling's output lives under
-    the *current* project's results dir — so rewrite the id segment. Only touches
+    ontology/account that ``<oldid>`` is wrong — the sibling's output lives under
+    the *current* ontology's results dir — so rewrite the id segment. Only touches
     ``disk/results/`` (concept outputs), never ``disk/<uploads>`` (datasource files).
     """
-    if not annotation or not project_id:
+    if not annotation or not ontology_id:
         return annotation
-    return _RESULTS_RE.sub(lambda m: m.group(1) + project_id, annotation)
+    return _RESULTS_RE.sub(lambda m: m.group(1) + ontology_id, annotation)
 
 
 def _predicate_of(annotation: str) -> str:
@@ -50,7 +50,7 @@ def is_default_parquet_output(annotation: str) -> bool:
     """Heuristic mirror of the server's default-parquet detection.
 
     A materialized concept's output bind looks like
-    ``@bind("p","parquet","<dir>/results/<project>","p").`` and is regenerated
+    ``@bind("p","parquet","<dir>/results/<ontology>","p").`` and is regenerated
     by the engine, so it is never re-sent.
     """
     ann = (annotation or "").strip()
@@ -130,7 +130,7 @@ def ensure_output_atom(definition: str, predicate: str, has_output_bind: bool) -
 
 def concept_save_kwargs(
     concept: LocalConcept, *, update: bool, datasource_binds: Dict[str, str] = None,
-    project_id: str = None
+    ontology_id: str = None
 ) -> Dict[str, object]:
     """Build the keyword arguments for ``px.save_concept`` (minus ontology_id/scope).
 
@@ -164,11 +164,11 @@ def concept_save_kwargs(
         binds.setdefault("input", [])
         binds["input"].extend(friendly_inputs)
 
-    if binds and project_id:
-        # Retarget sibling-output (parquet) input paths at the current project.
+    if binds and ontology_id:
+        # Retarget sibling-output (parquet) input paths at the current ontology.
         for entry in binds.get("input") or []:
             if isinstance(entry, dict) and isinstance(entry.get("annotation"), str):
-                entry["annotation"] = rewrite_results_project_id(entry["annotation"], project_id)
+                entry["annotation"] = rewrite_results_ontology_id(entry["annotation"], ontology_id)
 
     if binds:
         kwargs["binds"] = binds

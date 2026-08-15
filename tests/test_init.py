@@ -15,8 +15,8 @@ def test_init_scaffolds_workspace(tmp_path: Path):
     assert (tmp_path / "CLAUDE.md").is_file()
     assert (tmp_path / ".cursor" / "rules" / "prometheux.mdc").is_file()
     assert (tmp_path / ".px" / "schemas" / "workspace.schema.json").is_file()
-    assert (tmp_path / "projects" / "example" / "prometheux.yaml").is_file()
-    assert (tmp_path / "projects" / "example" / "concepts" / "customers.vadalog").is_file()
+    assert (tmp_path / "ontologies" / "example" / "prometheux.yaml").is_file()
+    assert (tmp_path / "ontologies" / "example" / "concepts" / "customers.vadalog").is_file()
 
     ws = (tmp_path / "prometheux.workspace.yaml").read_text()
     assert "name: acme" in ws
