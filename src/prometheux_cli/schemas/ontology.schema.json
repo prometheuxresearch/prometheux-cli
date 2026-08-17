@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.prometheux.ai/ontology.schema.json",
+  "$id": "https://prometheuxresearch.github.io/prometheux-cli/ontology.schema.json",
   "title": "Prometheux ontology manifest",
   "description": "prometheux.yaml — one ontology's lineage: concepts, datasources, ontology schema graph, apps, and ontology-scoped context.",
   "type": "object",

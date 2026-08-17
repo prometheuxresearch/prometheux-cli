@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.prometheux.ai/concept-meta.schema.json",
+  "$id": "https://prometheuxresearch.github.io/prometheux-cli/concept-meta.schema.json",
   "title": "Concept meta envelope",
   "description": "*.meta.yaml — the shared, Vadalog-shaped envelope for a logic/sql/cypher/python concept. The body (rules) lives in the sibling body file. Edges are derived from predicates, never written here.",
   "type": "object",

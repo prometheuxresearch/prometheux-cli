@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.prometheux.ai/workspace.schema.json",
+  "$id": "https://prometheuxresearch.github.io/prometheux-cli/workspace.schema.json",
   "title": "Prometheux workspace manifest",
   "description": "prometheux.workspace.yaml — one git repo = one workspace: a shared context vault plus many ontologies.",
   "type": "object",
