@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.prometheux.ai/datasource.schema.json",
+  "$id": "https://prometheuxresearch.github.io/prometheux-cli/datasource.schema.json",
   "title": "Datasource spec",
   "description": "A connection spec. Secrets are referenced by ${ENV_VAR} placeholders and resolved from the environment at apply — never stored in the file.",
   "type": "object",
