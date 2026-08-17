@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.prometheux.ai/context-concept.schema.json",
+  "$id": "https://prometheuxresearch.github.io/prometheux-cli/context-concept.schema.json",
   "title": "Context concept",
   "description": "*.context.yaml — a context concept: a note selection. Static pins note body paths; dynamic retrieves by query. References notes by body path, never by opaque note UUID.",
   "type": "object",

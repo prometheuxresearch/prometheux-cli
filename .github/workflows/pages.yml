@@ -1,7 +1,8 @@
 name: Publish JSON Schemas
 
-# Serves the bundled JSON Schemas as static files at https://schemas.prometheux.ai/
-# (each schema's `$id` points there). The site is built from the SAME schema files the
+# Serves the bundled JSON Schemas as static files at
+# https://prometheuxresearch.github.io/prometheux-cli/ (each schema's `$id` points
+# there). The site is built from the SAME schema files the
 # CLI ships in src/prometheux_cli/schemas/, so the hosted copies can never drift from
 # what `px validate` enforces.
 
@@ -36,11 +37,9 @@ jobs:
           OUT="_site"
           mkdir -p "$OUT"
 
-          # Flat copy: each schema is served at the root path its $id references.
+          # Flat copy: each schema is served at the path its $id references
+          # (https://prometheuxresearch.github.io/prometheux-cli/<name>.schema.json).
           cp "$SRC"/*.schema.json "$OUT"/
-
-          # Custom domain (persists the Pages domain + triggers TLS provisioning).
-          echo "schemas.prometheux.ai" > "$OUT/CNAME"
 
           # Bypass Jekyll processing (we serve raw static files).
           touch "$OUT/.nojekyll"
@@ -57,7 +56,7 @@ jobs:
             echo '<ul>'
             for f in "$OUT"/*.schema.json; do
               name="$(basename "$f")"
-              echo "<li><a href=\"/$name\">$name</a></li>"
+              echo "<li><a href=\"$name\">$name</a></li>"
             done
             echo '</ul></body></html>'
           } > "$OUT/index.html"

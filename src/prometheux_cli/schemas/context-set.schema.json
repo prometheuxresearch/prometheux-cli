@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.prometheux.ai/context-set.schema.json",
+  "$id": "https://prometheuxresearch.github.io/prometheux-cli/context-set.schema.json",
   "title": "Context set manifest frontmatter",
   "description": "The YAML frontmatter of a *.context.md manifest. Carries the Prometheux config and points at pristine body files. Note identity = (manifest, referenced path); duplicates are allowed and surfaced, never deduped.",
   "type": "object",
