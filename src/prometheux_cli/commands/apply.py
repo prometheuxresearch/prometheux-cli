@@ -563,6 +563,18 @@ def _resolve_or_create_ontology(px, ontology: LocalOntology) -> str:
         )
     try:
         pid = px.save_ontology(None, ontology.name, ontology.scope)
+        if not pid:
+            # Defensive: a create must return an id. If it doesn't (e.g. the save
+            # response shape changes), aborting here prevents the far worse failure
+            # of saving concepts under a null id (INSERT INTO concepts_None) and
+            # leaving an un-exportable half-created ontology behind.
+            click.echo(
+                click.style("FAIL", fg="red", bold=True)
+                + f": created ontology '{ontology.name}' but the server returned no id; "
+                "aborting before concepts are written. Re-run apply to adopt it by name.",
+                err=True,
+            )
+            sys.exit(1)
         click.echo(f"  created ontology {pid}")
         return pid
     except Exception as exc:  # noqa: BLE001
