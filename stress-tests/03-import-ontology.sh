@@ -26,23 +26,22 @@ hr; printf '%sScenario 3: import a graph from an external source%s\n' "$C_BLD" "
 step "Guard: a concept-less ontology_schema must warn (it renders empty)"
 GUARD_WS="$STATE_DIR/$SCENARIO/guard"
 rm -rf "$GUARD_WS"
-mkdir -p "$GUARD_WS/projects/hollow"/{concepts,ontology}
+mkdir -p "$GUARD_WS/ontologies/hollow"/{concepts,ontology}
 cat > "$GUARD_WS/prometheux.workspace.yaml" <<'YAML'
 schemaVersion: 1
 workspace:
   name: guard
-projects:
-  - ./projects/hollow
+ontologies:
+  - ./ontologies/hollow
 YAML
-cat > "$GUARD_WS/projects/hollow/prometheux.yaml" <<'YAML'
+cat > "$GUARD_WS/ontologies/hollow/prometheux.yaml" <<'YAML'
 schemaVersion: 1
-project:
+ontology:
   name: hollow
-  scope: user
 concepts: ./concepts
-ontology: ./ontology/schema.yaml
+ontologySchema: ./ontology/schema.yaml
 YAML
-cat > "$GUARD_WS/projects/hollow/ontology/schema.yaml" <<'YAML'
+cat > "$GUARD_WS/ontologies/hollow/ontology/schema.yaml" <<'YAML'
 nodes:
   - id: company
     label: Company
@@ -56,8 +55,8 @@ assert_out_has "will show as EMPTY"     # the hollow-ontology guard fired
 # ─── Part B — the real import (needs the platform) ──────────────────────────
 require_auth
 new_workspace
-PROJ="$WS/projects/$SCENARIO"
-mkdir -p "$PROJ"/{concepts,datasources,files,ontology} "$WS/external"
+ONTO="$WS/ontologies/$SCENARIO"
+mkdir -p "$ONTO"/{concepts,datasources,files,ontology} "$WS/external"
 
 # 1. external export: a property graph as node list + edge list (instances)
 step "Author external export (graph data: nodes + edges)"
@@ -75,37 +74,36 @@ ada,works_at,acme
 alan,works_at,globex
 acme,makes,gizmo
 CSV
-cp "$WS/external/nodes.csv" "$PROJ/files/nodes.csv"
-cp "$WS/external/edges.csv" "$PROJ/files/edges.csv"
+cp "$WS/external/nodes.csv" "$ONTO/files/nodes.csv"
+cp "$WS/external/edges.csv" "$ONTO/files/edges.csv"
 
 # 2. manifests
 cat > "$WS/prometheux.workspace.yaml" <<YAML
 schemaVersion: 1
 workspace:
   name: $SCENARIO
-projects:
-  - ./projects/$SCENARIO
+ontologies:
+  - ./ontologies/$SCENARIO
 YAML
 {
   echo "schemaVersion: 1"
-  echo "project:"
-  if [[ -n "${SAVED_PROJECT_ID:-}" ]]; then echo "  id: $SAVED_PROJECT_ID"; fi
+  echo "ontology:"
+  if [[ -n "${SAVED_ONTOLOGY_ID:-}" ]]; then echo "  id: $SAVED_ONTOLOGY_ID"; fi
   echo "  name: $SCENARIO"
-  echo "  scope: user"
   echo "datasources:"
   echo "  - ./datasources/nodes_csv.yaml"
   echo "  - ./datasources/edges_csv.yaml"
   echo "concepts: ./concepts"
-  echo "ontology: ./ontology/schema.yaml"
-} > "$PROJ/prometheux.yaml"
+  echo "ontologySchema: ./ontology/schema.yaml"
+} > "$ONTO/prometheux.yaml"
 
-cat > "$PROJ/datasources/nodes_csv.yaml" <<'YAML'
+cat > "$ONTO/datasources/nodes_csv.yaml" <<'YAML'
 name: nodes_csv
 type: csv
 file: ../files/nodes.csv
 useHeaders: "true"
 YAML
-cat > "$PROJ/datasources/edges_csv.yaml" <<'YAML'
+cat > "$ONTO/datasources/edges_csv.yaml" <<'YAML'
 name: edges_csv
 type: csv
 file: ../files/edges.csv
@@ -114,10 +112,10 @@ YAML
 
 # 3. ingest the graph AS CONCEPTS (this is what populates the lineage/ontology)
 step "Author concepts: ingest nodes + edges, then a derived join"
-cat > "$PROJ/concepts/graph_node.vadalog" <<'VL'
+cat > "$ONTO/concepts/graph_node.vadalog" <<'VL'
 graph_node(Id, Kind) :- source_nodes(Id, Kind).
 VL
-cat > "$PROJ/concepts/graph_node.meta.yaml" <<'YAML'
+cat > "$ONTO/concepts/graph_node.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: graph_node
 group: ingest
@@ -128,10 +126,10 @@ binds:
       table_name: nodes.csv
 YAML
 
-cat > "$PROJ/concepts/graph_edge.vadalog" <<'VL'
+cat > "$ONTO/concepts/graph_edge.vadalog" <<'VL'
 graph_edge(FromId, Label, ToId) :- source_edges(FromId, Label, ToId).
 VL
-cat > "$PROJ/concepts/graph_edge.meta.yaml" <<'YAML'
+cat > "$ONTO/concepts/graph_edge.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: graph_edge
 group: ingest
@@ -143,19 +141,19 @@ binds:
 YAML
 
 # derived: joins the two ingest concepts — the references ARE the lineage edges.
-cat > "$PROJ/concepts/edge_enriched.vadalog" <<'VL'
+cat > "$ONTO/concepts/edge_enriched.vadalog" <<'VL'
 edge_enriched(FromId, FromKind, Label, ToId) :-
     graph_edge(FromId, Label, ToId),
     graph_node(FromId, FromKind).
 VL
-cat > "$PROJ/concepts/edge_enriched.meta.yaml" <<'YAML'
+cat > "$ONTO/concepts/edge_enriched.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: edge_enriched
 group: derive
 YAML
 
 # 4. a type-level ontology (now legitimate — concepts back the project)
-cat > "$PROJ/ontology/schema.yaml" <<'YAML'
+cat > "$ONTO/ontology/schema.yaml" <<'YAML'
 nodes:
   - id: company
     label: Company
@@ -191,7 +189,7 @@ assert_out_lacks "will show as EMPTY"
 step "Apply: connect data, create concepts + ontology"
 assert_ok apply "$WS" --yes
 assert_out_lacks "skipped"
-remember_project_id
+remember_ontology_id
 step "Re-plan is clean"
 assert_plan_clean "$WS"
 
@@ -205,9 +203,9 @@ fi
 
 # 8. pull back and assert BOTH concepts and ontology survived
 step "Pull into a fresh dir; assert concepts + ontology round-trip"
-PID="$(sed -n 's/^[[:space:]]*id:[[:space:]]*//p' "$PROJ/prometheux.yaml" | head -1)"
+PID="$(sed -n 's/^[[:space:]]*id:[[:space:]]*//p' "$ONTO/prometheux.yaml" | head -1)"
 if [[ -z "$PID" ]]; then
-  fail "no project id written back — cannot pull"
+  fail "no ontology id written back — cannot pull"
 else
   PULLED="$WS/pulled"; rm -rf "$PULLED"; mkdir -p "$PULLED"
   if px_run pull "$PID" --out "$PULLED"; then

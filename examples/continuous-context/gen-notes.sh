@@ -6,14 +6,14 @@
 #
 # Usage:
 #   ./gen-notes.sh [DIR] [INTERVAL_SECS] [WORDS_PER_FILE]
-# Defaults: DIR = ./workspace/projects/ctx/context, INTERVAL = 10, WORDS = 40
+# Defaults: DIR = ./workspace/ontologies/ctx/context, INTERVAL = 10, WORDS = 40
 #
 # Files are NOT deleted — inspect them to compare against the platform. Ctrl-C to stop.
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-DIR="${1:-$HERE/workspace/projects/ctx/context}"
+DIR="${1:-$HERE/workspace/ontologies/ctx/context}"
 INTERVAL="${2:-10}"
 NWORDS="${3:-40}"
 WORDS_SRC="/usr/share/dict/words"

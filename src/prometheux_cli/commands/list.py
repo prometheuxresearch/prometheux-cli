@@ -15,13 +15,6 @@ import click
 
 from ..sdk import SdkError, connected_sdk
 
-_SCOPE = click.option(
-    "--scope",
-    default="user",
-    type=click.Choice(["user", "organization"]),
-    help="Which scope to list from.",
-)
-
 
 @click.group()
 def list_() -> None:
@@ -29,27 +22,25 @@ def list_() -> None:
 
 
 @list_.command("ontologies")
-@_SCOPE
-def list_ontologies(scope: str) -> None:
+def list_ontologies() -> None:
     """List ontologies. The ID is what `px pull` / `px delete` take."""
     px, url, _ = _connect()
-    rows = _call(lambda: px.list_ontologies([scope]) or [])
+    rows = _call(lambda: px.list_ontologies() or [])
     _print_table(
-        f"Ontologies at {url} (scope: {scope})",
+        f"Ontologies at {url}",
         ["ID", "NAME", "AUTHOR"],
         [[o.get("id"), o.get("name"), o.get("author")] for o in rows],
-        empty=f"No {scope}-scoped ontologies.",
+        empty="No ontologies.",
         hint="Pull one with: px pull <id>",
     )
 
 
 @list_.command("concepts")
 @click.option("--ontology", "ontology_id", required=True, help="Ontology id whose concepts to list.")
-@_SCOPE
-def list_concepts(ontology_id: str, scope: str) -> None:
+def list_concepts(ontology_id: str) -> None:
     """List an ontology's concepts. The PREDICATE is what `px run` / `px show` take."""
     px, url, _ = _connect()
-    rows = _call(lambda: px.list_concepts(ontology_id, scope) or [])
+    rows = _call(lambda: px.list_concepts(ontology_id) or [])
     _print_table(
         f"Concepts in {ontology_id} at {url}",
         ["PREDICATE", "TYPE", "GROUP", "POPULATED"],
@@ -60,32 +51,30 @@ def list_concepts(ontology_id: str, scope: str) -> None:
 
 
 @list_.command("apps")
-@_SCOPE
-def list_apps(scope: str) -> None:
+def list_apps() -> None:
     """List apps across all your ontologies. The ID is the app identifier."""
     px, url, _ = _connect()
-    rows = _call(lambda: px.list_all_apps(scope) or [])
+    rows = _call(lambda: px.list_all_apps() or [])
     _print_table(
-        f"Apps at {url} (scope: {scope})",
+        f"Apps at {url}",
         ["ID", "NAME", "ONTOLOGY", "STATUS"],
         [[a.get("id"), a.get("name"), a.get("project_name") or a.get("project_id"),
           a.get("status")] for a in rows],
-        empty=f"No {scope}-scoped apps.",
+        empty="No apps.",
     )
 
 
 @list_.command("datasources")
-@_SCOPE
-def list_datasources(scope: str) -> None:
+def list_datasources() -> None:
     """List connected datasources. The ID is the datasource identifier."""
     px, url, _ = _connect()
-    rows = _call(lambda: px.list_sources(scope) or [])
+    rows = _call(lambda: px.list_sources() or [])
     _print_table(
-        f"Datasources at {url} (scope: {scope})",
+        f"Datasources at {url}",
         ["ID", "TABLE", "TYPE", "PREDICATE"],
         [[s.get("id") or s.get("datasource_id"), s.get("table_name"),
           s.get("datasource_type"), s.get("predicate_placeholder")] for s in rows],
-        empty=f"No {scope}-scoped datasources.",
+        empty="No datasources.",
     )
 
 

@@ -8,10 +8,10 @@ class _FakePx:
     def __init__(self, statuses):
         self._statuses = statuses
 
-    def list_ontologies(self, scopes):
+    def list_ontologies(self):
         return [{"id": "p1", "name": "Alpha"}, {"id": "p2", "name": "Beta"}]
 
-    def get_execution_statuses(self, scope):
+    def get_execution_statuses(self):
         return self._statuses
 
 

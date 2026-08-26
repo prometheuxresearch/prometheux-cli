@@ -49,17 +49,17 @@ check() {
   fi
 }
 
-# Minimal valid-ish workspace at $1 (workspace + one project + empty concepts).
+# Minimal valid-ish workspace at $1 (workspace + one ontology + empty concepts).
 mkbase() {
   local d="$1"
-  mkdir -p "$d/projects/p/concepts"
-  printf 'schemaVersion: 1\nworkspace:\n  name: fuzz\nprojects:\n  - ./projects/p\n' > "$d/prometheux.workspace.yaml"
-  printf 'schemaVersion: 1\nproject:\n  name: P\n  scope: user\nconcepts: ./concepts\n' > "$d/projects/p/prometheux.yaml"
+  mkdir -p "$d/ontologies/p/concepts"
+  printf 'schemaVersion: 1\nworkspace:\n  name: fuzz\nontologies:\n  - ./ontologies/p\n' > "$d/prometheux.workspace.yaml"
+  printf 'schemaVersion: 1\nontology:\n  name: P\nconcepts: ./concepts\n' > "$d/ontologies/p/prometheux.yaml"
 }
 concept() {  # concept <dir> <predicate> <body> <metaExtra>
   local d="$1" p="$2"
-  printf '%s\n' "$3" > "$d/projects/p/concepts/$p.vadalog"
-  { printf 'conceptType: logic\noutputPredicate: %s\n' "$p"; [[ -n "${4:-}" ]] && printf '%s\n' "$4"; } > "$d/projects/p/concepts/$p.meta.yaml"
+  printf '%s\n' "$3" > "$d/ontologies/p/concepts/$p.vadalog"
+  { printf 'conceptType: logic\noutputPredicate: %s\n' "$p"; [[ -n "${4:-}" ]] && printf '%s\n' "$4"; } > "$d/ontologies/p/concepts/$p.meta.yaml"
 }
 
 printf '%sOffline fuzzer — px validate must exit cleanly on every input%s\n' "$B" "$Z"
@@ -68,7 +68,7 @@ printf 'timeout=%ss  px=%s\n\n' "$TIMEOUT" "$PX"
 # 0. baseline: a clean workspace must PASS
 d="$TMP/c0"; mkbase "$d"; concept "$d" ok "ok(X) :- src(X)." ; check "baseline-clean" "$d"
 
-# 1. YAML alias-expansion bomb (bounded ~10^6) in the project manifest
+# 1. YAML alias-expansion bomb (bounded ~10^6) in the ontology manifest
 d="$TMP/c1"; mkbase "$d"
 {
   echo 'schemaVersion: 1'
@@ -77,18 +77,17 @@ d="$TMP/c1"; mkbase "$d"
   echo 'c: &c [*b,*b,*b,*b,*b,*b,*b,*b,*b,*b]'
   echo 'd: &d [*c,*c,*c,*c,*c,*c,*c,*c,*c,*c]'
   echo 'e: &e [*d,*d,*d,*d,*d,*d,*d,*d,*d,*d]'
-  echo 'project:'
+  echo 'ontology:'
   echo '  name: bomb'
-  echo '  scope: user'
   echo '  boom: [*e,*e,*e,*e,*e,*e,*e,*e,*e,*e]'
   echo 'concepts: ./concepts'
-} > "$d/projects/p/prometheux.yaml"
+} > "$d/ontologies/p/prometheux.yaml"
 check "yaml-alias-bomb" "$d"
 
 # 2. deeply nested YAML (recursion) in a concept meta
 d="$TMP/c2"; mkbase "$d"
-printf 'ok(X) :- src(X).\n' > "$d/projects/p/concepts/ok.vadalog"
-{ printf 'conceptType: logic\noutputPredicate: ok\ndeep: '; printf '[%.0s' $(seq 1 4000); printf ']%.0s' $(seq 1 4000); printf '\n'; } > "$d/projects/p/concepts/ok.meta.yaml"
+printf 'ok(X) :- src(X).\n' > "$d/ontologies/p/concepts/ok.vadalog"
+{ printf 'conceptType: logic\noutputPredicate: ok\ndeep: '; printf '[%.0s' $(seq 1 4000); printf ']%.0s' $(seq 1 4000); printf '\n'; } > "$d/ontologies/p/concepts/ok.meta.yaml"
 check "deep-nested-yaml" "$d"
 
 # 3. unicode / emoji predicate + filename
@@ -102,19 +101,19 @@ check "1000-char-name" "$d"
 
 # 5. symlink loop inside the workspace
 d="$TMP/c5"; mkbase "$d"; concept "$d" ok "ok(X) :- src(X)."
-ln -s "$d/projects/p/concepts" "$d/projects/p/concepts/loop" 2>/dev/null || true
+ln -s "$d/ontologies/p/concepts" "$d/ontologies/p/concepts/loop" 2>/dev/null || true
 check "symlink-loop" "$d"
 
 # 6. huge concept body (~15MB)
 d="$TMP/c6"; mkbase "$d"
-yes 'huge(X) :- src(X).' 2>/dev/null | head -n 600000 > "$d/projects/p/concepts/huge.vadalog" || true
-printf 'conceptType: logic\noutputPredicate: huge\n' > "$d/projects/p/concepts/huge.meta.yaml"
+yes 'huge(X) :- src(X).' 2>/dev/null | head -n 600000 > "$d/ontologies/p/concepts/huge.vadalog" || true
+printf 'conceptType: logic\noutputPredicate: huge\n' > "$d/ontologies/p/concepts/huge.meta.yaml"
 check "huge-15MB-body" "$d"
 
 # 7. malformed YAML meta (tab + unclosed quote)
 d="$TMP/c7"; mkbase "$d"
-printf 'ok(X) :- src(X).\n' > "$d/projects/p/concepts/ok.vadalog"
-printf 'conceptType: logic\n\toutputPredicate: "unclosed\n' > "$d/projects/p/concepts/ok.meta.yaml"
+printf 'ok(X) :- src(X).\n' > "$d/ontologies/p/concepts/ok.vadalog"
+printf 'conceptType: logic\n\toutputPredicate: "unclosed\n' > "$d/ontologies/p/concepts/ok.meta.yaml"
 check "malformed-yaml" "$d"
 
 # 8. duplicate output predicate across two concepts
@@ -122,21 +121,21 @@ d="$TMP/c8"; mkbase "$d"; concept "$d" a "dup(X) :- src(X)." "outputPredicate: d
 check "duplicate-output-pred" "$d"
 
 # 9. a concept "file" that is actually a directory
-d="$TMP/c9"; mkbase "$d"; mkdir -p "$d/projects/p/concepts/weird.vadalog"
+d="$TMP/c9"; mkbase "$d"; mkdir -p "$d/ontologies/p/concepts/weird.vadalog"
 check "dir-named-like-file" "$d"
 
 # 10. invalid UTF-8 bytes in a meta file
-d="$TMP/c10"; mkbase "$d"; printf 'ok(X) :- src(X).\n' > "$d/projects/p/concepts/ok.vadalog"
-printf 'conceptType: logic\noutputPredicate: ok\nx: \xff\xfe\xc3\x28\n' > "$d/projects/p/concepts/ok.meta.yaml"
+d="$TMP/c10"; mkbase "$d"; printf 'ok(X) :- src(X).\n' > "$d/ontologies/p/concepts/ok.vadalog"
+printf 'conceptType: logic\noutputPredicate: ok\nx: \xff\xfe\xc3\x28\n' > "$d/ontologies/p/concepts/ok.meta.yaml"
 check "invalid-utf8-meta" "$d"
 
 # 11. concept dependency cycle A <-> B
 d="$TMP/c11"; mkbase "$d"; concept "$d" a "a(X) :- b(X)."; concept "$d" b "b(X) :- a(X)."
 check "dependency-cycle" "$d"
 
-# 12. hostile manifest types (id/scope wrong shapes)
+# 12. hostile manifest types (id/name wrong shapes)
 d="$TMP/c12"; mkbase "$d"
-printf 'schemaVersion: 1\nproject:\n  id: []\n  name: 123\n  scope: 7\nconcepts: ./concepts\n' > "$d/projects/p/prometheux.yaml"
+printf 'schemaVersion: 1\nontology:\n  id: []\n  name: 123\nconcepts: ./concepts\n' > "$d/ontologies/p/prometheux.yaml"
 check "hostile-manifest-types" "$d"
 
 echo
