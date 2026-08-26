@@ -39,7 +39,6 @@ def _local(concepts):
         slug="s",
         id="abc123",
         name="Demo",
-        scope="user",
         concepts=concepts,
         datasources={"snowflake_prod": {"name": "snowflake_prod", "type": "snowflake"}},
     )
@@ -86,7 +85,7 @@ def test_create_and_delete(export_dict):
 # ---- unit: datasource diff (connection-identity match) --------------------
 
 def _local_ds(datasources):
-    return LocalOntology(slug="s", id="abc123", name="D", scope="user", datasources=datasources)
+    return LocalOntology(slug="s", id="abc123", name="D", datasources=datasources)
 
 
 def test_datasource_reused_when_connection_matches():
@@ -168,7 +167,7 @@ def test_datasource_port_normalization_matches():
 
 def _local_with_ontology(ontology):
     return LocalOntology(
-        slug="s", id="abc123", name="Demo", scope="user",
+        slug="s", id="abc123", name="Demo", 
         concepts=[
             _concept("customer", "customer(Id, Name) :- source_customers(Id, Name)."),
             _concept("risk", "risk(Id) :- customer(Id, _)."),
@@ -194,7 +193,7 @@ def test_ontology_update_when_differs(export_dict):
 
 
 def test_ontology_create_when_server_empty():
-    export = {"project_id": "abc123", "scope": "user", "tables": {
+    export = {"project_id": "abc123", "tables": {
         "projects_workspace_id": {"data": [{"project_id": "abc123", "name": "T"}]},
         "concepts_abc123": {"data": []},
     }}
@@ -206,13 +205,13 @@ def test_ontology_create_when_server_empty():
 def test_ontology_unchanged_ignores_server_derived_edge_id():
     # Server enriches edges with a derived `id`; a hand-authored edge omits it.
     server = '{"nodes": [{"id": "customer"}], "edges": [{"from": "customer", "to": "order", "label": "places", "id": "customer_places_order"}]}'
-    export = {"project_id": "abc123", "scope": "user", "tables": {
+    export = {"project_id": "abc123", "tables": {
         "projects_workspace_id": {"data": [{"project_id": "abc123", "name": "T"}]},
         "concepts_abc123": {"data": []},
         "ontology_schema_abc123": {"data": [{"ontology_schema_data": server}]},
     }}
     local = LocalOntology(
-        slug="s", id="abc123", name="Demo", scope="user",
+        slug="s", id="abc123", name="Demo", 
         ontology_schema={"nodes": [{"id": "customer"}], "edges": [{"from": "customer", "to": "order", "label": "places"}]},
     )
     result = plan_ontology(local, export)
@@ -235,7 +234,7 @@ def _sql_concept(pred, body):
 
 
 def _sql_server_export(pred):
-    return {"project_id": "abc123", "scope": "user", "tables": {
+    return {"project_id": "abc123", "tables": {
         "projects_workspace_id": {"data": [{"project_id": "abc123", "name": "P"}]},
         "concepts_abc123": {"data": [{
             "predicate_name": pred, "concept_type": "sql",
@@ -245,7 +244,7 @@ def _sql_server_export(pred):
 
 
 def test_sql_unchanged_compares_source_not_rules():
-    local = LocalOntology(slug="s", id="abc123", name="D", scope="user",
+    local = LocalOntology(slug="s", id="abc123", name="D", 
                          concepts=[_sql_concept("acme", "SELECT X FROM t")])
     result = plan_ontology(local, _sql_server_export("acme"),
                           server_sources={"acme": "SELECT X FROM t"})
@@ -254,7 +253,7 @@ def test_sql_unchanged_compares_source_not_rules():
 
 
 def test_sql_update_when_source_edited():
-    local = LocalOntology(slug="s", id="abc123", name="D", scope="user",
+    local = LocalOntology(slug="s", id="abc123", name="D", 
                          concepts=[_sql_concept("acme", "SELECT X, Y FROM t")])
     result = plan_ontology(local, _sql_server_export("acme"),
                           server_sources={"acme": "SELECT X FROM t"})
@@ -269,7 +268,7 @@ def _app(identity, name, definition, has_id=True):
 
 
 def _local_with_apps(apps):
-    return LocalOntology(slug="s", id="abc123", name="Demo", scope="user", apps=apps)
+    return LocalOntology(slug="s", id="abc123", name="Demo", apps=apps)
 
 
 def _server_app(app_id, name, definition):
@@ -314,10 +313,10 @@ class _FakePx:
     def __init__(self, export):
         self._export = export
 
-    def list_ontologies(self, scopes):
+    def list_ontologies(self):
         return [{"id": "abc123", "name": "Al Dente Supply Chain"}]
 
-    def export_ontology(self, project, scope):
+    def export_ontology(self, project):
         return self._export
 
 

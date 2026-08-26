@@ -21,7 +21,7 @@ dependencies = [
     # 0.3.2 is the floor because earlier releases call the retired
     # /ontologies/export-project and /import-project aliases, which the backend
     # no longer serves — pull/plan/apply would 404 against a current pod.
-    "prometheux_chain>=0.3.2",
+    "prometheux_chain>=0.4.0",
 ]
 
 [project.optional-dependencies]

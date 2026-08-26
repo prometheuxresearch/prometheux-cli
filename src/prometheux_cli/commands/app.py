@@ -13,8 +13,6 @@ import click
 
 from ..sdk import SdkError, connected_sdk, rest_data
 
-_SCOPE = click.option("--scope", default="user", type=click.Choice(["user", "organization"]))
-
 
 @click.group()
 def app() -> None:
@@ -36,12 +34,11 @@ def _fail(msg: str) -> None:
 @app.command("publish")
 @click.argument("ontology_id")
 @click.argument("app_id")
-@_SCOPE
-def publish_cmd(ontology_id: str, app_id: str, scope: str) -> None:
+def publish_cmd(ontology_id: str, app_id: str) -> None:
     """Publish a frozen, shareable snapshot of APP_ID's current draft."""
     _connect()
     try:
-        rest_data("POST", f"/api/v1/apps/{ontology_id}/{app_id}/publish", params={"scope": scope})
+        rest_data("POST", f"/api/v1/apps/{ontology_id}/{app_id}/publish")
     except SdkError as exc:
         _fail(str(exc))
     click.echo(click.style("Published", fg="green", bold=True) + f" app {app_id}.")
@@ -50,12 +47,11 @@ def publish_cmd(ontology_id: str, app_id: str, scope: str) -> None:
 @app.command("unpublish")
 @click.argument("ontology_id")
 @click.argument("app_id")
-@_SCOPE
-def unpublish_cmd(ontology_id: str, app_id: str, scope: str) -> None:
+def unpublish_cmd(ontology_id: str, app_id: str) -> None:
     """Remove APP_ID's published snapshot (back to draft-only)."""
     _connect()
     try:
-        rest_data("POST", f"/api/v1/apps/{ontology_id}/{app_id}/unpublish", params={"scope": scope})
+        rest_data("POST", f"/api/v1/apps/{ontology_id}/{app_id}/unpublish")
     except SdkError as exc:
         _fail(str(exc))
     click.echo(click.style("Unpublished", fg="green", bold=True) + f" app {app_id}.")

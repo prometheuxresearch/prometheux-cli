@@ -12,8 +12,8 @@ class _FakePx:
         self.fail = fail
         self.ran = []
 
-    def run_concept(self, ontology_id, concept_name, scope="user", params=None, persist_outputs=False, **kw):
-        self.ran.append((ontology_id, concept_name, scope, params, persist_outputs))
+    def run_concept(self, ontology_id, concept_name, params=None, persist_outputs=False, **kw):
+        self.ran.append((ontology_id, concept_name, params, persist_outputs))
         if self.fail:
             raise RuntimeError("engine boom")
         return {"status": "ok"}
@@ -27,7 +27,7 @@ def _workspace(tmp_path: Path):
     c = tmp_path / "ontologies" / "p" / "concepts"
     c.mkdir(parents=True)
     (tmp_path / "ontologies" / "p" / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: pid1\n  name: P\n  scope: user\nconcepts: ./concepts\n"
+        "schemaVersion: 1\nontology:\n  id: pid1\n  name: P\nconcepts: ./concepts\n"
     )
     (c / "customer.vadalog").write_text("customer(1).\n")
     (c / "customer.meta.yaml").write_text("conceptType: logic\noutputPredicate: customer\n")
@@ -47,7 +47,7 @@ def test_run_emits_start_and_complete(tmp_path: Path, monkeypatch):
 
     result = CliRunner().invoke(cli, ["run", "risk", str(tmp_path)])
     assert result.exit_code == 0, result.output
-    assert fake.ran == [("pid1", "risk", "user", {}, False)]  # persist off by default
+    assert fake.ran == [("pid1", "risk", {}, False)]  # persist off by default
 
     evs = _events(tmp_path)
     assert [e["eventType"] for e in evs] == ["START", "COMPLETE"]
@@ -63,7 +63,7 @@ def test_run_persist_flag(tmp_path: Path, monkeypatch):
     _workspace(tmp_path)
     result = CliRunner().invoke(cli, ["run", "risk", str(tmp_path), "--persist"])
     assert result.exit_code == 0, result.output
-    assert fake.ran[0][4] is True  # persist_outputs passed through
+    assert fake.ran[0][3] is True  # persist_outputs passed through
 
 
 def test_run_failure_emits_fail(tmp_path: Path, monkeypatch):

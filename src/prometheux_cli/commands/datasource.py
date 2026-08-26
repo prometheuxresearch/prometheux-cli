@@ -14,8 +14,6 @@ import click
 
 from ..sdk import SdkError, connected_sdk, rest_data
 
-_SCOPE = click.option("--scope", default="user", type=click.Choice(["user", "organization"]))
-
 
 @click.group()
 def datasource() -> None:
@@ -37,12 +35,11 @@ def _fail(msg: str) -> None:
 @datasource.command("preview")
 @click.argument("bind_annotation")
 @click.option("--limit", default=10, show_default=True, help="Rows to preview.")
-@_SCOPE
-def preview_cmd(bind_annotation: str, limit: int, scope: str) -> None:
+def preview_cmd(bind_annotation: str, limit: int) -> None:
     """Preview the first rows of the datasource with BIND_ANNOTATION."""
     px, _, _ = _connect()
     try:
-        res = px.preview_datasource(bind_annotation, scope=scope, limit=limit)
+        res = px.preview_datasource(bind_annotation, limit=limit)
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     click.echo(_json.dumps(res, indent=2, default=str))
@@ -52,8 +49,7 @@ def preview_cmd(bind_annotation: str, limit: int, scope: str) -> None:
 @click.argument("bind_or_id")
 @click.option("--by-id", is_flag=True, help="Treat the argument as a datasource id, not a bind annotation.")
 @click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
-@_SCOPE
-def delete_cmd(bind_or_id: str, by_id: bool, assume_yes: bool, scope: str) -> None:
+def delete_cmd(bind_or_id: str, by_id: bool, assume_yes: bool) -> None:
     """Disconnect a datasource by its BIND annotation (or id with --by-id)."""
     px, _, _ = _connect()
     source_id = bind_or_id
@@ -61,7 +57,7 @@ def delete_cmd(bind_or_id: str, by_id: bool, assume_yes: bool, scope: str) -> No
         # Resolve the bind annotation to a datasource id (the REST /data/cleanup
         # route deletes by id, not bind — mirror the MCP tool's resolution).
         try:
-            sources = px.list_sources(scope) or []
+            sources = px.list_sources() or []
         except Exception as exc:  # noqa: BLE001
             _fail(str(exc))
         norm = " ".join(bind_or_id.split())
@@ -81,7 +77,7 @@ def delete_cmd(bind_or_id: str, by_id: bool, assume_yes: bool, scope: str) -> No
         sys.exit(1)
     try:
         data = rest_data("POST", "/api/v1/data/cleanup",
-                         json={"source_ids": [source_id], "scope": scope}) or {}
+                         json={"source_ids": [source_id]}) or {}
     except SdkError as exc:
         _fail(str(exc))
     n = data.get("deleted_count") if isinstance(data, dict) else None

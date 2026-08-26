@@ -10,10 +10,10 @@ class _FakePx:
     def __init__(self, export):
         self._export = export
 
-    def list_ontologies(self, scopes):
+    def list_ontologies(self):
         return [{"id": "abc123", "name": "Al Dente Supply Chain"}]
 
-    def export_ontology(self, project, scope):
+    def export_ontology(self, project):
         return self._export
 
 

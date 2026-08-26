@@ -12,7 +12,7 @@ and `delete` reach the platform (auth via `px login`, or `JARVISPY_URL` + `PMTX_
   `--url TEXT` (default `http://localhost:8000`), `--token TEXT` (prompted if omitted),
   `--no-verify`. In CI, set `JARVISPY_URL` + `PMTX_TOKEN` instead.
 - **`px pull ONTOLOGY`** — export a live ontology id into `./ontologies/<slug>/`.
-  `--scope [user|organization]`, `--out PATH`, `--slug TEXT`, `--with-files` (download
+  `--out PATH`, `--slug TEXT`, `--with-files` (download
   uploaded file-datasource content so the ontology round-trips on another account).
 - **`px plan [DIR]`** — diff local files vs server: create / update / replace per resource +
   the downstream re-run cascade. Writes nothing. `-p/--ontology TEXT` (repeatable) to scope.
@@ -25,9 +25,9 @@ and `delete` reach the platform (auth via `px login`, or `JARVISPY_URL` + `PMTX_
 - **`px context apply [DIR]`** — apply the context layer from `*.context.md` manifests
   (idempotent via `.px/context-state.json`; commit that file). `-y/--yes`, `--prune`.
 - **`px status`** — one row per ontology: current/latest run status + executing concept.
-  `-w/--watch`, `-i/--interval FLOAT`, `--scope TEXT` (comma-separated).
+  `-w/--watch`, `-i/--interval FLOAT`.
 - **`px delete ONTOLOGY`** — permanently delete an ontology by id or name (server auto-snapshots
-  first; local files untouched). `--scope [user|organization]`, `-y/--yes`.
+  first; local files untouched). `-y/--yes`.
 
 **Typical loop:** author files → `px validate` (until PASS) → `px plan` (read the cascade) →
 `px apply`. Never put secrets in files; reference them as `${ENV_VAR}`.

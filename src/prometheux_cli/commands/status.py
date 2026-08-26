@@ -21,9 +21,7 @@ _FG = {"running": "yellow", "success": "green", "error": "red",
 @click.option("--watch", "-w", is_flag=True, help="Refresh continuously until Ctrl-C.")
 @click.option("--interval", "-i", default=3.0, show_default=True,
               help="Seconds between refreshes with --watch.")
-@click.option("--scope", default="user", show_default=True,
-              help="Comma-separated scopes to include, e.g. 'user,organization'.")
-def status(watch: bool, interval: float, scope: str) -> None:
+def status(watch: bool, interval: float) -> None:
     """Show each ontology's current/latest run status.
 
     One row per ontology: running / success / error / cancelled / interrupted /
@@ -31,7 +29,6 @@ def status(watch: bool, interval: float, scope: str) -> None:
     globally serialized, so at most one ontology is ever ``running``. With
     --watch the table refreshes in place and announces when a run starts.
     """
-    scopes = [s.strip() for s in scope.split(",") if s.strip()] or ["user"]
     try:
         px, url, _ = connected_sdk(require_token=True)
     except SdkError as exc:
@@ -39,31 +36,29 @@ def status(watch: bool, interval: float, scope: str) -> None:
         sys.exit(1)
 
     if not watch:
-        _render(_fetch(px, scopes), {}, url)
+        _render(_fetch(px), {}, url)
         return
     prev: dict = {}
     try:
         while True:
             click.clear()
-            prev = _render(_fetch(px, scopes), prev, url)
+            prev = _render(_fetch(px), prev, url)
             time.sleep(interval)
     except KeyboardInterrupt:
         click.echo("\nstopped.")
 
 
-def _fetch(px, scopes):
+def _fetch(px):
     """Join the ontology list with the latest run per ontology into rows."""
     try:
-        onts = px.list_ontologies(scopes) or []
+        onts = px.list_ontologies() or []
     except Exception as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
-    statuses: dict = {}
-    for sc in scopes:
-        try:
-            statuses.update(px.get_execution_statuses(sc) or {})
-        except Exception:  # noqa: BLE001 - a scope may be unavailable; others still render
-            pass
+    try:
+        statuses: dict = px.get_execution_statuses() or {}
+    except Exception:  # noqa: BLE001 - statuses are decoration; the list still renders
+        statuses = {}
 
     rows = []
     for o in onts:

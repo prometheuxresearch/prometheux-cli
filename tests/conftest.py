@@ -9,12 +9,11 @@ def export_dict():
     pid = "abc123"
     return {
         "project_id": pid,
-        "scope": "user",
         "tables": {
             "user_migrations": {"schema": [], "data": [{"x": 1}], "row_count": 1},
             "projects_workspace_id": {
                 "schema": [],
-                "data": [{"project_id": pid, "name": "Al Dente Supply Chain", "scope": "user"}],
+                "data": [{"project_id": pid, "name": "Al Dente Supply Chain"}],
                 "row_count": 1,
             },
             "datasources_workspace_id": {

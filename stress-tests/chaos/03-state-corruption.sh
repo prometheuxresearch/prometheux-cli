@@ -21,30 +21,29 @@ NOTES=3
 
 hr; printf '%sChaos: corrupt context state → duplicate-notes check%s\n' "$C_BLD" "$C_RST"; hr
 require_auth
-new_workspace                       # persistent ws under .state/, reuses the project id
-PROJ="$WS/projects/ctx"
-VAULT="$PROJ/context"
-mkdir -p "$PROJ/concepts" "$VAULT"
+new_workspace                       # persistent ws under .state/, reuses the ontology id
+ONTO="$WS/ontologies/ctx"
+VAULT="$ONTO/context"
+mkdir -p "$ONTO/concepts" "$VAULT"
 
-# A trivial fact concept so `apply` creates the project (context needs a real id).
+# A trivial fact concept so `apply` creates the ontology (context needs a real id).
 cat > "$WS/prometheux.workspace.yaml" <<YAML
 schemaVersion: 1
 workspace:
   name: chaos-state
-projects:
-  - ./projects/ctx
+ontologies:
+  - ./ontologies/ctx
 YAML
 {
   echo "schemaVersion: 1"
-  echo "project:"
-  if [[ -n "${SAVED_PROJECT_ID:-}" ]]; then echo "  id: $SAVED_PROJECT_ID"; fi
+  echo "ontology:"
+  if [[ -n "${SAVED_ONTOLOGY_ID:-}" ]]; then echo "  id: $SAVED_ONTOLOGY_ID"; fi
   echo "  name: $NAME"
-  echo "  scope: user"
   echo "concepts: ./concepts"
   echo "context: ./context"
-} > "$PROJ/prometheux.yaml"
-printf 'seed("a").\nseed("b").\n' > "$PROJ/concepts/seed.vadalog"
-printf 'conceptType: logic\noutputPredicate: seed\n' > "$PROJ/concepts/seed.meta.yaml"
+} > "$ONTO/prometheux.yaml"
+printf 'seed("a").\nseed("b").\n' > "$ONTO/concepts/seed.vadalog"
+printf 'conceptType: logic\noutputPredicate: seed\n' > "$ONTO/concepts/seed.meta.yaml"
 
 # K distinct note bodies + a project-scoped manifest referencing them.
 step "Author $NOTES context notes + manifest"
@@ -56,9 +55,9 @@ for ((i = 1; i <= NOTES; i++)); do
 done
 { printf -- '---\nscope: project\nactivation: retrieved\nkind: fact\nnotes:\n%s---\nchaos state test\n' "$entries"; } > "$VAULT/notes.context.md"
 
-step "Apply the project (creates it + writes the id back)"
+step "Apply the ontology (creates it + writes the id back)"
 assert_ok apply "$WS" -y
-remember_project_id
+remember_ontology_id
 
 step "First context apply — should CREATE $NOTES notes"
 px_run context apply "$WS" -y
@@ -90,6 +89,6 @@ else
 fi
 
 step "Teardown: delete the project"
-PID="$(sed -n 's/^[[:space:]]*id:[[:space:]]*//p' "$PROJ/prometheux.yaml" | head -1)"
+PID="$(sed -n 's/^[[:space:]]*id:[[:space:]]*//p' "$ONTO/prometheux.yaml" | head -1)"
 [[ -n "$PID" ]] && ( "$PX" delete "$PID" -y >/dev/null 2>&1 && info "deleted $PID" || warn "could not delete $PID" )
 rm -rf "$WS"   # drop the local ws so the deleted id isn't reused next run
