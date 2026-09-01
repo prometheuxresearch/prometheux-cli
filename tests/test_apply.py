@@ -62,6 +62,9 @@ def test_project_missing_detects_deleted_project():
     assert _ontology_missing({"tables": {}}) is True
     assert _ontology_missing({"tables": {"projects_x": {"data": []}}}) is True
     assert _ontology_missing({"tables": {"projects_x": {"data": [{"project_id": "x"}]}}}) is False
+    # Current export wire name after the project → ontology rename.
+    assert _ontology_missing({"tables": {"ontologies_workspace_id": {"data": []}}}) is True
+    assert _ontology_missing({"tables": {"ontologies_workspace_id": {"data": [{"id": "x"}]}}}) is False
 
 
 def test_ensure_output_atom_appends_when_missing():
@@ -81,6 +84,26 @@ def test_concept_save_kwargs_adds_output_atom_for_logic():
     c = _c("risk", "risk(X) :- customer(X).")
     kw = concept_save_kwargs(c, update=False)
     assert '@output("risk").' in kw["definition"]
+
+
+def test_concept_save_kwargs_inlines_param_annotations():
+    params = '@param("date_from","2025-01-01").\n@param("date_to","2026-12-31").'
+    c = _c(
+        "kpi",
+        "kpi(X) :- src(X), D >= as_date(${date_from}).",
+        annotations={"param_annotations": params},
+    )
+    kw = concept_save_kwargs(c, update=False)
+    assert params in kw["definition"]
+    assert kw["definition"].index("@param") < kw["definition"].index("kpi(X)")
+
+    already = _c(
+        "kpi",
+        params + "\nkpi(X) :- src(X).",
+        annotations={"param_annotations": params},
+    )
+    kw2 = concept_save_kwargs(already, update=False)
+    assert kw2["definition"].count('@param("date_from","2025-01-01").') == 1
 
 
 def test_rewrite_results_project_id():

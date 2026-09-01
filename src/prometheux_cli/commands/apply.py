@@ -151,7 +151,9 @@ def _ontology_missing(export) -> bool:
     if not export:
         return True
     for name, tbl in (export.get("tables") or {}).items():
-        if name.startswith("projects_") and (tbl or {}).get("data"):
+        # Server export used to prefix the ontology row `projects_`; current
+        # wire name is `ontologies_` (project → ontology rename). Accept both.
+        if name.startswith(("projects_", "ontologies_")) and (tbl or {}).get("data"):
             return False
     return True
 

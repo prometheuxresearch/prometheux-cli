@@ -174,6 +174,12 @@ def concept_save_kwargs(
         kwargs["binds"] = binds
 
     definition = concept.body
+    # `@param` lives in meta `annotations.param_annotations` (not in the body).
+    # The save endpoint only reconstructs binds + definition + @output, so the
+    # param atoms have to be inlined here or ${date_from} etc. fail at run.
+    param_ann = ((meta.get("annotations") or {}).get("param_annotations") or "").strip()
+    if param_ann and param_ann not in definition:
+        definition = param_ann + "\n" + definition
     if concept.concept_type == "logic":
         has_output_bind = bool(binds and binds.get("output"))
         definition = ensure_output_atom(definition, predicate, has_output_bind)
