@@ -60,5 +60,5 @@ each scenario reuses **one** ontology per script:
 1. `source "$(dirname "$0")/_lib.sh"` after setting `SCENARIO=<unique-name>`.
 2. `require_auth` then `new_workspace` (sets `$WS`, honors id reuse).
 3. Build files under `$WS`, then use the helpers: `assert_ok`,
-   `assert_out_has`, `assert_out_lacks`, `assert_plan_clean`, `remember_project_id`.
+   `assert_out_has`, `assert_out_lacks`, `assert_plan_clean`, `remember_ontology_id`.
 4. The `EXIT` trap prints the PASS/FAIL summary and sets the exit code.

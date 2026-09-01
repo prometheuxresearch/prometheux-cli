@@ -99,7 +99,7 @@ def run(concept, path, ontology_selectors, params, persist, ol_file, ol_url, no_
     emitter.emit("START", run_id, job_name, inputs, outputs)
     try:
         px.run_concept(
-            ontology.id, concept, scope=ontology.scope,
+            ontology.id, concept,
             params=_parse_params(params), persist_outputs=persist,
         )
     except Exception as exc:  # noqa: BLE001

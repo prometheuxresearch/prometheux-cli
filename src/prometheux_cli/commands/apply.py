@@ -97,9 +97,9 @@ def apply(path: Path, ontology_selectors, assume_yes: bool, prune: bool, no_snap
             )
             ontology.id = None
             export = None
-        server_apps = fetch_server_apps(px, ontology.id, ontology.scope) if ontology.id else None
-        server_sources = fetch_server_sources(px, ontology.id, ontology.scope) if ontology.id else None
-        server_datasources = fetch_server_datasources(px, ontology.scope)
+        server_apps = fetch_server_apps(px, ontology.id) if ontology.id else None
+        server_sources = fetch_server_sources(px, ontology.id) if ontology.id else None
+        server_datasources = fetch_server_datasources(px)
         result = plan_ontology(ontology, export, note_resolver=resolve_notes,
                               server_apps=server_apps, server_sources=server_sources,
                               server_datasources=server_datasources, with_files=with_files)
@@ -162,7 +162,7 @@ def _export(px, ontology: LocalOntology):
     if not ontology.id:
         return None
     try:
-        return px.export_ontology(ontology.id, ontology.scope)
+        return px.export_ontology(ontology.id)
     except Exception as exc:  # noqa: BLE001
         click.echo(
             click.style("FAIL", fg="red", bold=True)
@@ -191,7 +191,7 @@ def _apply_ontology(px, ontology: LocalOntology, result: PlanResult, *, prune: b
 
     if snapshot:
         try:
-            px.create_snapshot(ontology.id, ontology.scope, "pre-apply via px")
+            px.create_snapshot(ontology.id, description="pre-apply via px")
             click.echo("  snapshot taken (pre-apply)")
         except Exception as exc:  # noqa: BLE001 - snapshot is best-effort safety
             click.echo(f"  {click.style('warning', fg='yellow')} snapshot failed: {exc}")
@@ -222,7 +222,7 @@ def _apply_ontology(px, ontology: LocalOntology, result: PlanResult, *, prune: b
                 if is_generative(concept):
                     _save_generative_concept(ontology, concept, kwargs, resolve_notes)
                 else:
-                    px.save_concept(ontology_id=ontology.id, scope=ontology.scope, **kwargs)
+                    px.save_concept(ontology_id=ontology.id, **kwargs)
                 verb = "updated" if concept.predicate in updates else "created"
                 click.echo(f"  {verb} concept {concept.predicate}")
                 applied += 1
@@ -257,7 +257,7 @@ def _apply_ontology(px, ontology: LocalOntology, result: PlanResult, *, prune: b
 
     if result.ontology_change in {"create", "update"} and ontology.ontology_schema:
         try:
-            px.save_ontology_schema(ontology.id, ontology.ontology_schema, ontology.scope)
+            px.save_ontology_schema(ontology.id, ontology.ontology_schema)
             verb = "created" if result.ontology_change == "create" else "updated"
             click.echo(f"  {verb} ontology schema")
         except Exception as exc:  # noqa: BLE001
@@ -274,7 +274,7 @@ def _apply_ontology(px, ontology: LocalOntology, result: PlanResult, *, prune: b
         deletes = [c.predicate for c in result.concept_changes if c.action == "delete"]
         if deletes:
             try:
-                px.cleanup_concepts(ontology.id, ontology.scope, deletes)
+                px.cleanup_concepts(ontology.id, deletes)
                 click.echo(f"  pruned {len(deletes)} concept(s): {', '.join(deletes)}")
             except Exception as exc:  # noqa: BLE001
                 click.echo(f"  {click.style('warning', fg='yellow')} prune failed: {exc}")
@@ -339,7 +339,7 @@ def _apply_apps(px, ontology: LocalOntology, result: PlanResult, *, prune: bool,
             if change.server_id and not definition.get("id"):
                 definition["id"] = change.server_id
             try:
-                res = px.save_app(ontology.id, definition, ontology.scope)
+                res = px.save_app(ontology.id, definition)
                 new_id = (res or {}).get("id") if isinstance(res, dict) else res
                 verb = "created" if change.action == "create" else "updated"
                 click.echo(f"  {verb} app {app.name}")
@@ -354,7 +354,7 @@ def _apply_apps(px, ontology: LocalOntology, result: PlanResult, *, prune: bool,
                 sys.exit(1)
         elif change.action == "delete" and prune and change.server_id:
             try:
-                px.delete_app(ontology.id, change.server_id, ontology.scope)
+                px.delete_app(ontology.id, change.server_id)
                 click.echo(f"  pruned app {change.name}")
             except Exception as exc:  # noqa: BLE001
                 click.echo(f"  {click.style('warning', fg='yellow')} prune app {change.name} failed: {exc}")
@@ -416,7 +416,6 @@ def _save_generative_concept(ontology: LocalOntology, concept, kwargs: dict, res
 
     payload = {
         "definition": kwargs.get("definition") or "",
-        "scope": ontology.scope,
         "concept_type": kwargs["concept_type"],
         "concept_name": kwargs.get("concept_name") or concept.predicate,
         "output_predicate": kwargs.get("output_predicate", ""),
@@ -470,7 +469,7 @@ def _apply_datasources(px, ontology: LocalOntology, result: PlanResult):
                 filename = _single_table(spec)
                 click.echo(f"  connecting datasource {name} ({type_})")
             db = px.Database(**kwargs)
-            connected = px.connect_sources(db, scope=ontology.scope)
+            connected = px.connect_sources(db)
             template = bind_template_from_sources((connected or {}).get("sources"), filename)
             if template:
                 ds_binds[name] = template
@@ -539,24 +538,24 @@ def _upload_and_kwargs(px, ontology: LocalOntology, name: str, spec: dict):
 
 
 def _resolve_or_create_ontology(px, ontology: LocalOntology) -> str:
-    """Adopt an existing same-name ontology in scope, else create a new one.
+    """Adopt an existing same-name ontology on the account, else create a new one.
 
     Reconcile-on-create: if a previous apply created the ontology on the server
     but its id was never persisted back to the manifest (process killed in the
     window, or the write-back failed), the manifest is still id-less. Creating
     unconditionally would then duplicate the ontology on every retry. So first
-    look for a single same-name ontology in scope and adopt its id; only create
-    when there is no existing match.
+    look for a single same-name ontology on the account and adopt its id; only
+    create when there is no existing match.
     """
     try:
-        existing = [p for p in (px.list_ontologies([ontology.scope]) or [])
+        existing = [p for p in (px.list_ontologies() or [])
                     if p.get("name") == ontology.name]
     except Exception:  # noqa: BLE001 - listing is best-effort; fall back to create
         existing = []
 
     if len(existing) == 1:
         pid = str(existing[0].get("id"))
-        click.echo(f"  adopted existing ontology {pid} (same name in scope — no duplicate created)")
+        click.echo(f"  adopted existing ontology {pid} (same name on the account — no duplicate created)")
         return pid
     if len(existing) > 1:
         click.echo(
@@ -564,7 +563,19 @@ def _resolve_or_create_ontology(px, ontology: LocalOntology) -> str:
             f"'{ontology.name}'; creating a new one (can't disambiguate — set ontology.id to target one)"
         )
     try:
-        pid = px.save_ontology(None, ontology.name, ontology.scope)
+        pid = px.save_ontology(None, ontology.name)
+        if not pid:
+            # Defensive: a create must return an id. If it doesn't (e.g. the save
+            # response shape changes), aborting here prevents the far worse failure
+            # of saving concepts under a null id (INSERT INTO concepts_None) and
+            # leaving an un-exportable half-created ontology behind.
+            click.echo(
+                click.style("FAIL", fg="red", bold=True)
+                + f": created ontology '{ontology.name}' but the server returned no id; "
+                "aborting before concepts are written. Re-run apply to adopt it by name.",
+                err=True,
+            )
+            sys.exit(1)
         click.echo(f"  created ontology {pid}")
         return pid
     except Exception as exc:  # noqa: BLE001

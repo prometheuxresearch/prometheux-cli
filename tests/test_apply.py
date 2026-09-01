@@ -221,51 +221,51 @@ class _FakePx:
         self.apps_deleted = []
         self.server_apps = []  # [{id, name, definition}]
 
-    def list_ontologies(self, scopes):
+    def list_ontologies(self):
         return [{"id": "abc123", "name": "Al Dente Supply Chain"}]
 
-    def export_ontology(self, project, scope):
+    def export_ontology(self, project):
         return self._export
 
     def save_concept(self, **kwargs):
         self.saved.append(kwargs)
         return {"id": "x"}
 
-    def create_snapshot(self, ontology_id, scope, description=None):
+    def create_snapshot(self, ontology_id, description=None):
         self.snapshots += 1
         return {"snapshot_id": "s1"}
 
-    def cleanup_concepts(self, ontology_id, scope, names):
+    def cleanup_concepts(self, ontology_id, names):
         self.pruned = names
         return {}
 
-    def save_ontology_schema(self, ontology_id, ontology_schema_data, scope="user"):
-        self.ontologies_saved.append((ontology_id, ontology_schema_data, scope))
+    def save_ontology_schema(self, ontology_id, ontology_schema_data):
+        self.ontologies_saved.append((ontology_id, ontology_schema_data))
         return {}
 
     # apps surface
-    def list_apps(self, ontology_id, scope="user"):
+    def list_apps(self, ontology_id):
         return [{"id": a["id"], "name": a["name"]} for a in self.server_apps]
 
-    def get_app(self, ontology_id, app_id, scope="user"):
+    def get_app(self, ontology_id, app_id):
         for a in self.server_apps:
             if a["id"] == app_id:
                 return {"id": a["id"], "name": a["name"], "definition": a["definition"]}
         return {}
 
-    def save_app(self, ontology_id, app, scope="user"):
-        self.apps_saved.append((ontology_id, app, scope))
+    def save_app(self, ontology_id, app):
+        self.apps_saved.append((ontology_id, app))
         return {"id": app.get("id") or "app-new-id"}
 
-    def delete_app(self, ontology_id, app_id, scope="user"):
-        self.apps_deleted.append((ontology_id, app_id, scope))
+    def delete_app(self, ontology_id, app_id):
+        self.apps_deleted.append((ontology_id, app_id))
         return {"status": "success"}
 
     # datasource surface
     def Database(self, **kwargs):
         return kwargs
 
-    def connect_sources(self, db, scope="user", compute_row_count=False):
+    def connect_sources(self, db, compute_row_count=False):
         self.connected.append(db)
         fn = db.get("database_name") or "data.csv"
         return {
@@ -348,7 +348,7 @@ def test_apply_abort_without_yes(tmp_path: Path, export_dict, monkeypatch):
 def _empty_export():
     return {
         "project_id": "abc123",
-        "scope": "user",
+        
         "tables": {
             "projects_workspace_id": {"schema": [], "data": [{"project_id": "abc123", "name": "T"}]},
             "concepts_abc123": {"schema": [], "data": [], "row_count": 0},
@@ -367,7 +367,7 @@ def _ds_workspace(tmp_path: Path):
     )
     (tmp_path / "context").mkdir()
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n  scope: user\n"
+        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n"
         "concepts: ./concepts\ndatasources:\n"
         "  - ./datasources/sf.yaml\n  - ./datasources/cust.yaml\n"
     )
@@ -435,15 +435,15 @@ def test_remap_app_project_ids_stale_foreign_id_falls_back_to_owning():
 def test_apply_rewrites_app_project_id_on_recreate(tmp_path: Path, monkeypatch):
     """A recreated project's app has its stale page project.id rewritten to the new id."""
     # server has no such project id -> triggers recreate; save_app captures the definition
-    fake = _FakePx({"project_id": "STALE", "scope": "user", "tables": {}})  # _ontology_missing -> True
+    fake = _FakePx({"project_id": "STALE", "tables": {}})  # _ontology_missing -> True
     saved_defs = []
-    fake.save_app = lambda ontology_id, app, scope="user": (saved_defs.append(app), {"id": "app-x"})[1]
-    fake.save_ontology = lambda oid, name, scope, description=None: "NEWID"
+    fake.save_app = lambda ontology_id, app: (saved_defs.append(app), {"id": "app-x"})[1]
+    fake.save_ontology = lambda oid, name, description=None: "NEWID"
     monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
 
     proj = _apps_workspace(tmp_path, "")  # placeholder; overwrite manifest + app below
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: STALE\n  name: T\n  scope: user\n"
+        "schemaVersion: 1\nontology:\n  id: STALE\n  name: T\n"
         "concepts: ./concepts\napps: ./apps\n"
     )
     (proj / "concepts" / "c.vadalog").write_text("c(1).\n")
@@ -492,7 +492,7 @@ def test_apply_retries_concept_with_hidden_dependency(tmp_path: Path, monkeypatc
         "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies:\n  - ./ontologies/t\n"
     )
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n  scope: user\nconcepts: ./concepts\n"
+        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\nconcepts: ./concepts\n"
     )
     # `downstream` sorts before `upstream`; its dep is hidden in a FROM clause,
     # so topo_order leaves it first -> first save fails -> must be retried.
@@ -530,7 +530,7 @@ def test_apply_skips_unresolvable_but_applies_rest(tmp_path: Path, monkeypatch):
         "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies:\n  - ./ontologies/t\n"
     )
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n  scope: user\n"
+        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n"
         "concepts: ./concepts\nontologySchema: ./ontology/schema.yaml\n"
     )
     (proj / "concepts" / "good.vadalog").write_text("good(1).\n")
@@ -563,7 +563,7 @@ def test_apply_genuine_error_still_aborts(tmp_path: Path, monkeypatch):
         "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies:\n  - ./ontologies/t\n"
     )
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n  scope: user\nconcepts: ./concepts\n"
+        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\nconcepts: ./concepts\n"
     )
     (proj / "concepts" / "c.vadalog").write_text("c(1).\n")
     (proj / "concepts" / "c.meta.yaml").write_text("conceptType: logic\noutputPredicate: c\n")
@@ -585,7 +585,7 @@ def test_apply_wires_concept_to_postgres_table(tmp_path: Path, monkeypatch):
     """A DB datasource binds the concept to the matching table, not sources[0]."""
     fake = _FakePx(_empty_export())
 
-    def connect(db, scope="user", compute_row_count=False):
+    def connect(db, compute_row_count=False):
         # A real postgres connect returns EVERY source in the group; the wanted
         # table must be selected by name, not by position.
         return {"connectionStatus": True, "sources": [
@@ -607,7 +607,7 @@ def test_apply_wires_concept_to_postgres_table(tmp_path: Path, monkeypatch):
         "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies:\n  - ./ontologies/t\n"
     )
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n  scope: user\n"
+        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n"
         "concepts: ./concepts\ndatasources:\n  - ./datasources/pg_companies.yaml\n"
     )
     (proj / "datasources" / "pg_companies.yaml").write_text(
@@ -643,7 +643,7 @@ def test_apply_wires_concept_to_csv_datasource(tmp_path: Path, monkeypatch):
         "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies:\n  - ./ontologies/t\n"
     )
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n  scope: user\n"
+        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n"
         "concepts: ./concepts\ndatasources:\n  - ./datasources/people.yaml\n"
     )
     (proj / "datasources" / "people.yaml").write_text("name: people_ds\ntype: csv\nfile: ../data/people.csv\n")
@@ -685,7 +685,7 @@ def _two_projects(tmp_path: Path):
         c = tmp_path / "ontologies" / slug / "concepts"
         c.mkdir(parents=True)
         (tmp_path / "ontologies" / slug / "prometheux.yaml").write_text(
-            f"schemaVersion: 1\nontology:\n  id: abc123\n  name: {name}\n  scope: user\nconcepts: ./concepts\n"
+            f"schemaVersion: 1\nontology:\n  id: abc123\n  name: {name}\nconcepts: ./concepts\n"
         )
         (c / f"{pred}.vadalog").write_text(f"{pred}(1).\n")
         (c / f"{pred}.meta.yaml").write_text(f"conceptType: logic\noutputPredicate: {pred}\n")
@@ -736,7 +736,7 @@ def _generative_workspace(tmp_path: Path):
         "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies:\n  - ./ontologies/t\n"
     )
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n  scope: user\nconcepts: ./concepts\n"
+        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\nconcepts: ./concepts\n"
     )
     return proj
 
@@ -822,7 +822,7 @@ def _apps_workspace(tmp_path: Path, app_yaml: str):
         "schemaVersion: 1\nworkspace:\n  name: w\ncontext: ./context\nontologies:\n  - ./ontologies/t\n"
     )
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n  scope: user\n"
+        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n"
         "concepts: ./concepts\napps: ./apps\n"
     )
     (proj / "apps" / "sales.app.yaml").write_text(app_yaml)
@@ -837,7 +837,7 @@ def test_apply_creates_app_and_persists_id(tmp_path: Path, monkeypatch):
     result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
     assert result.exit_code == 0, result.output
     assert len(fake.apps_saved) == 1
-    _, saved_def, _ = fake.apps_saved[0]
+    _, saved_def = fake.apps_saved[0]
     assert saved_def["name"] == "Sales"
     # the assigned id is written back into the file for idempotent re-apply
     import yaml
@@ -854,7 +854,7 @@ def test_apply_updates_existing_app_by_id(tmp_path: Path, monkeypatch):
     result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
     assert result.exit_code == 0, result.output
     assert len(fake.apps_saved) == 1
-    _, saved_def, _ = fake.apps_saved[0]
+    _, saved_def = fake.apps_saved[0]
     assert saved_def["id"] == "a1" and saved_def["pages"] == [2]
 
 
@@ -882,12 +882,12 @@ def test_apply_prune_deletes_server_only_app(tmp_path: Path, monkeypatch):
     proj = tmp_path / "ontologies" / "t"
     (proj / "concepts").mkdir(parents=True)
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\n  scope: user\nconcepts: ./concepts\n"
+        "schemaVersion: 1\nontology:\n  id: abc123\n  name: T\nconcepts: ./concepts\n"
     )
 
     result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes", "--prune"])
     assert result.exit_code == 0, result.output
-    assert fake.apps_deleted == [("abc123", "gone", "user")]
+    assert fake.apps_deleted == [("abc123", "gone")]
 
 
 def test_apply_prune_deletes(tmp_path: Path, export_dict, monkeypatch):
@@ -915,7 +915,7 @@ def test_apply_pushes_edited_ontology(tmp_path: Path, export_dict, monkeypatch):
     result = runner.invoke(cli, ["apply", str(tmp_path), "--yes"])
     assert result.exit_code == 0, result.output
     assert len(fake.ontologies_saved) == 1
-    ontology_id, data, scope = fake.ontologies_saved[0]
+    ontology_id, data = fake.ontologies_saved[0]
     assert ontology_id == "abc123"
     assert data == {"nodes": [{"id": "customer"}], "edges": []}
     assert "ontology schema" in result.output

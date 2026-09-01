@@ -65,10 +65,10 @@ def plan(path: Path, ontology_selectors) -> None:
         export = None
         server_apps = None
         server_sources = None
-        server_datasources = fetch_server_datasources(px, ontology.scope)
+        server_datasources = fetch_server_datasources(px)
         if ontology.id:
             try:
-                export = px.export_ontology(ontology.id, ontology.scope)
+                export = px.export_ontology(ontology.id)
             except Exception as exc:  # noqa: BLE001
                 click.echo(
                     click.style("FAIL", fg="red", bold=True)
@@ -76,8 +76,8 @@ def plan(path: Path, ontology_selectors) -> None:
                     err=True,
                 )
                 sys.exit(1)
-            server_apps = fetch_server_apps(px, ontology.id, ontology.scope)
-            server_sources = fetch_server_sources(px, ontology.id, ontology.scope)
+            server_apps = fetch_server_apps(px, ontology.id)
+            server_sources = fetch_server_sources(px, ontology.id)
         result = plan_ontology(ontology, export, note_resolver=resolve_notes,
                               server_apps=server_apps, server_sources=server_sources,
                               server_datasources=server_datasources)
@@ -91,7 +91,7 @@ def plan(path: Path, ontology_selectors) -> None:
 
 def _render(result: PlanResult, is_new: bool) -> bool:
     new_note = "  (new ontology — everything is create)" if is_new else ""
-    click.echo(f'\nPlan against ontology "{result.ontology_name}" (scope: {result.scope}){new_note}')
+    click.echo(f'\nPlan against ontology "{result.ontology_name}"{new_note}')
 
     for w in result.warnings:
         click.echo(f"  {click.style('warning', fg='yellow')} {w}")

@@ -13,8 +13,6 @@ import click
 
 from ..sdk import SdkError, connected_sdk
 
-_SCOPE = click.option("--scope", default="user", type=click.Choice(["user", "organization"]))
-
 
 @click.group()
 def snapshot() -> None:
@@ -36,12 +34,11 @@ def _fail(msg: str) -> None:
 
 @snapshot.command("list")
 @click.argument("ontology_id")
-@_SCOPE
-def list_cmd(ontology_id: str, scope: str) -> None:
+def list_cmd(ontology_id: str) -> None:
     """List snapshots of ONTOLOGY_ID, newest first."""
     px, url, _ = _connect()
     try:
-        snaps = px.list_snapshots(ontology_id, scope) or []
+        snaps = px.list_snapshots(ontology_id) or []
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     if not snaps:
@@ -59,12 +56,11 @@ def list_cmd(ontology_id: str, scope: str) -> None:
 @snapshot.command("create")
 @click.argument("ontology_id")
 @click.option("--description", "-d", default=None, help="Optional label for the snapshot.")
-@_SCOPE
-def create_cmd(ontology_id: str, description: str, scope: str) -> None:
+def create_cmd(ontology_id: str, description: str) -> None:
     """Create a snapshot of ONTOLOGY_ID."""
     px, _, _ = _connect()
     try:
-        res = px.create_snapshot(ontology_id, scope, description=description) or {}
+        res = px.create_snapshot(ontology_id, description=description) or {}
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     sid = res.get("id") if isinstance(res, dict) else res
@@ -76,8 +72,7 @@ def create_cmd(ontology_id: str, description: str, scope: str) -> None:
 @click.argument("snapshot_id")
 @click.option("--no-safety", is_flag=True, help="Skip the automatic pre-restore safety snapshot.")
 @click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
-@_SCOPE
-def restore_cmd(ontology_id: str, snapshot_id: str, no_safety: bool, assume_yes: bool, scope: str) -> None:
+def restore_cmd(ontology_id: str, snapshot_id: str, no_safety: bool, assume_yes: bool) -> None:
     """Restore ONTOLOGY_ID to SNAPSHOT_ID (overwrites current state)."""
     if not assume_yes and not click.confirm(
         f"Restore {ontology_id} to snapshot {snapshot_id}? This overwrites its current state.",
@@ -87,7 +82,7 @@ def restore_cmd(ontology_id: str, snapshot_id: str, no_safety: bool, assume_yes:
         sys.exit(1)
     px, _, _ = _connect()
     try:
-        px.restore_snapshot(snapshot_id, ontology_id, scope, create_safety_snapshot=not no_safety)
+        px.restore_snapshot(snapshot_id, ontology_id, create_safety_snapshot=not no_safety)
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     click.echo(click.style("Restored", fg="green", bold=True) + f" {ontology_id} to snapshot {snapshot_id}.")
@@ -97,8 +92,7 @@ def restore_cmd(ontology_id: str, snapshot_id: str, no_safety: bool, assume_yes:
 @click.argument("ontology_id")
 @click.argument("snapshot_id")
 @click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
-@_SCOPE
-def delete_cmd(ontology_id: str, snapshot_id: str, assume_yes: bool, scope: str) -> None:
+def delete_cmd(ontology_id: str, snapshot_id: str, assume_yes: bool) -> None:
     """Delete SNAPSHOT_ID of ONTOLOGY_ID."""
     if not assume_yes and not click.confirm(
         f"Permanently delete snapshot {snapshot_id}?", default=False
@@ -107,7 +101,7 @@ def delete_cmd(ontology_id: str, snapshot_id: str, assume_yes: bool, scope: str)
         sys.exit(1)
     px, _, _ = _connect()
     try:
-        px.delete_snapshot(snapshot_id, ontology_id, scope)
+        px.delete_snapshot(snapshot_id, ontology_id)
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     click.echo(click.style("Deleted snapshot", fg="green", bold=True) + f" {snapshot_id}.")

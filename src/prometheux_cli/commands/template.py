@@ -43,12 +43,11 @@ def list_cmd() -> None:
 @template.command("import")
 @click.argument("template_id")
 @click.option("--name", "new_name", default=None, help="Name for the new ontology (default: template's).")
-@click.option("--scope", default="user", type=click.Choice(["user", "organization"]))
-def import_cmd(template_id: str, new_name: str, scope: str) -> None:
+def import_cmd(template_id: str, new_name: str) -> None:
     """Clone TEMPLATE_ID into a new ontology on your account."""
     px, _, _ = _connect()
     try:
-        res = px.import_template(template_id, new_ontology_name=new_name, ontology_scope=scope) or {}
+        res = px.import_template(template_id, new_ontology_name=new_name) or {}
     except Exception as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)

@@ -18,6 +18,26 @@ would break a script.
 - `px apply` recognizes the `ontologies_*` export table (project → ontology rename), so an existing ontology is updated instead of treated as missing.
 - `px apply` inlines `annotations.param_annotations` (`@param`) into the saved definition so `${date_from}` / `${site}` concepts can run.
 
+## [0.3.0] - 2026-08-26
+
+### Removed (breaking)
+- Dropped the `user` / `organization` ontology scope axis everywhere. The organization
+  scope was never implemented end-to-end — every ontology was resolved against your own
+  identity regardless of the value — so it only ever added a flag to pass and a field to
+  keep in sync. Teams (server-side sharing) is the supported way to give someone else
+  access to an ontology.
+  - Removed the `--scope` flag from `px pull`, `px delete`, `px status`, `px query`,
+    `px search concepts`, and `px template import`. Scripts passing it now fail with
+    "no such option"; delete the flag.
+  - Removed the `ontology.scope` key from `prometheux.yaml`. It is no longer accepted:
+    manifests are validated with `additionalProperties: false`, so a leftover
+    `scope:` line is now a validation error. Delete that one line from each manifest —
+    or re-run `px pull` to regenerate it.
+  - `px init` scaffolds manifests without a `scope:` key.
+  - The context-note `--scope global|project` flag on `px list context` and
+    `px context apply` is a **different** axis and is unchanged.
+- Requires `prometheux_chain>=0.4.0`, which drops the same axis from the SDK.
+
 ## [0.2.0] - 2026-08-13
 
 ### Changed (breaking)

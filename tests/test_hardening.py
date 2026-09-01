@@ -33,16 +33,16 @@ class _FakePx:
         self.projects = projects
         self.created = []
 
-    def list_ontologies(self, scopes):
+    def list_ontologies(self):
         return self.projects
 
-    def save_ontology(self, _id, name, scope):
-        self.created.append((name, scope))
+    def save_ontology(self, _id, name):
+        self.created.append(name)
         return "NEW_ID"
 
 
 def _proj():
-    return SimpleNamespace(name="Demo", scope="user")
+    return SimpleNamespace(name="Demo")
 
 
 def test_resolve_adopts_single_existing_project():
@@ -54,18 +54,18 @@ def test_resolve_adopts_single_existing_project():
 def test_resolve_creates_when_none_exist():
     px = _FakePx([{"id": "OTHER", "name": "Unrelated"}])
     assert _resolve_or_create_ontology(px, _proj()) == "NEW_ID"
-    assert px.created == [("Demo", "user")]
+    assert px.created == ["Demo"]
 
 
 def test_resolve_creates_when_name_is_ambiguous():
     px = _FakePx([{"id": "a", "name": "Demo"}, {"id": "b", "name": "Demo"}])
     assert _resolve_or_create_ontology(px, _proj()) == "NEW_ID"
-    assert px.created == [("Demo", "user")]
+    assert px.created == ["Demo"]
 
 
 def test_resolve_falls_back_to_create_if_listing_fails():
     class Broken(_FakePx):
-        def list_ontologies(self, scopes):
+        def list_ontologies(self):
             raise RuntimeError("network down")
     px = Broken([])
     assert _resolve_or_create_ontology(px, _proj()) == "NEW_ID"

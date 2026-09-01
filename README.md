@@ -173,7 +173,6 @@ ontology, apps). With **no** `ONTOLOGY`, lists the ontologies visible to you and
 
 | Option | Meaning |
 |---|---|
-| `--scope [user\|organization]` | Scope to pull from. |
 | `--out PATH` | Workspace directory (default: `.`). |
 | `--slug TEXT` | Directory name under `ontologies/` (default: from ontology name). |
 | `--with-files` | Download uploaded **file-datasource content** into `files/` and write portable `file:` specs, so the ontology (with its files) can be re-applied elsewhere. |
@@ -192,7 +191,6 @@ is available. **Local workspace files are not touched.** Resolves by id first, t
 
 | Option | Meaning |
 |---|---|
-| `--scope [user\|organization]` | Scope to delete from (default `user`). |
 | `-y, --yes` | Skip the confirmation prompt (for scripts/CI). |
 
 ```bash
@@ -230,7 +228,7 @@ Creates the ontology if new; snapshots each ontology first (best-effort).
 
 Behavior notes:
 - **Deletions are safe by default** — a concept isn't deleted just because its file vanished;
-  use `--prune`. Datasources are user-scoped and never deleted.
+  use `--prune`. Datasources are account-wide and never deleted.
 - **A datasource already on the account is reused** (matched by type/host/port/table), not
   re-connected — so repeated applies don't pile up duplicate rows. `--with-files` forces a
   file re-upload.
@@ -275,12 +273,11 @@ highlighted and sorted first.
 |---|---|
 | `-w, --watch` | Refresh continuously until Ctrl-C. |
 | `-i, --interval FLOAT` | Seconds between refreshes with `--watch` (default `3.0`). |
-| `--scope TEXT` | Comma-separated scopes, e.g. `user,organization` (default `user`). |
 
 ```bash
 px status                       # one-shot table
 px status --watch               # live; announces when a run starts
-px status -w -i 5 --scope user,organization
+px status -w -i 5
 ```
 
 ### `px context apply [PATH]`
@@ -326,7 +323,7 @@ my-workspace/
   context/                      # workspace-global context (*.context.md + body files)
   ontologies/
     credit-risk/
-      prometheux.yaml           # ontology manifest (id, name, scope + section paths)
+      prometheux.yaml           # ontology manifest (id, name + section paths)
       concepts/
         customers.vadalog       # concept body (per-kind extension)
         customers.meta.yaml     # envelope: conceptType, outputPredicate, binds, group, …
@@ -361,17 +358,16 @@ schemaVersion: 1
 ontology:
   id: 1d22942b9a0        # server ontology id; absent on a brand-new ontology (apply fills it)
   name: Credit Risk
-  scope: user            # user | organization
 concepts: ./concepts
 datasources:
   - ./datasources/snowflake_prod.yaml
-ontology: ./ontology/schema.yaml
+ontologySchema: ./ontology/schema.yaml
 apps: ./apps
 context: ./context
 ```
 > `apply` writes the assigned `id` back into this file after creating an ontology — keep it (commit
 > it) so re-apply targets the same ontology. If the id is lost, `apply` reconciles by **name**
-> (adopts a single existing same-name ontology in scope rather than creating a duplicate); a unique
+> (adopts a single existing same-name ontology on the account rather than creating a duplicate); a unique
 > ontology name makes that reliable.
 
 ---

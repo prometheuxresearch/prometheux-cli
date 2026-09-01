@@ -11,9 +11,8 @@ from ..sdk import SdkError, connected_sdk
 
 @click.command()
 @click.argument("ontology", required=True)
-@click.option("--scope", default="user", type=click.Choice(["user", "organization"]))
 @click.option("-y", "--yes", is_flag=True, help="Skip the confirmation prompt.")
-def delete(ontology: str, scope: str, yes: bool) -> None:
+def delete(ontology: str, yes: bool) -> None:
     """Permanently delete ONTOLOGY (a server ontology id or name) and everything in it.
 
     Hard delete of the whole ontology — concepts, datasource binds, ontology,
@@ -28,7 +27,7 @@ def delete(ontology: str, scope: str, yes: bool) -> None:
     except SdkError as exc:
         _fail(str(exc))
 
-    target_id, target_name = _resolve(px, ontology, scope)
+    target_id, target_name = _resolve(px, ontology)
 
     label = f"'{target_name}' ({target_id})" if target_name else f"'{target_id}'"
     if not yes:
@@ -41,7 +40,7 @@ def delete(ontology: str, scope: str, yes: bool) -> None:
             sys.exit(1)
 
     try:
-        px.cleanup_ontologies(ontology_id=target_id, ontology_scope=scope)
+        px.cleanup_ontologies(ontology_id=target_id)
     except Exception as exc:  # noqa: BLE001 - surface SDK/HTTP errors cleanly
         _fail(f"delete failed: {exc}")
 
@@ -52,10 +51,10 @@ def delete(ontology: str, scope: str, yes: bool) -> None:
     )
 
 
-def _resolve(px, ontology: str, scope: str) -> tuple:
+def _resolve(px, ontology: str) -> tuple:
     """Resolve ONTOLOGY (id or exact name) to (id, name) against the account."""
     try:
-        ontologies = px.list_ontologies([scope]) or []
+        ontologies = px.list_ontologies() or []
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
 
@@ -66,7 +65,7 @@ def _resolve(px, ontology: str, scope: str) -> tuple:
     matches = [p for p in ontologies if p.get("name") == ontology]
     if not matches:
         _fail(
-            f"no {scope}-scoped ontology matches id/name '{ontology}'. "
+            f"no ontology matches id/name '{ontology}'. "
             "Run `px pull` (no args) to list ontologies."
         )
     if len(matches) > 1:

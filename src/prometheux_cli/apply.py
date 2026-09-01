@@ -132,7 +132,7 @@ def concept_save_kwargs(
     concept: LocalConcept, *, update: bool, datasource_binds: Dict[str, str] = None,
     ontology_id: str = None
 ) -> Dict[str, object]:
-    """Build the keyword arguments for ``px.save_concept`` (minus ontology_id/scope).
+    """Build the keyword arguments for ``px.save_concept`` (minus ontology_id).
 
     ``datasource_binds`` maps a datasource name to its connect-returned ``@bind``
     template, used to wire a concept's friendly ``binds.input`` (predicate +

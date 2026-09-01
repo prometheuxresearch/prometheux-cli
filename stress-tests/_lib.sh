@@ -96,33 +96,33 @@ assert_plan_clean() {
 }
 
 # --- per-scenario workspace -------------------------------------------------
-# Persistent under .state/<scenario>/ws so the project id (written back into
+# Persistent under .state/<scenario>/ws so the ontology id (written back into
 # prometheux.yaml on first apply) survives across runs and we update ONE
-# project. PX_FRESH=1 discards it and creates a new project (an orphan — the
-# CLI can't delete projects; note it to the operator).
+# ontology. PX_FRESH=1 discards it and creates a new ontology, leaving the old
+# one behind (remove it with `px delete <id> -y`); note it to the operator.
 WS=""
 new_workspace() {
   local ws="$STATE_DIR/$SCENARIO/ws"
   local saved_id=""
-  local manifest="$ws/projects/$SCENARIO/prometheux.yaml"
+  local manifest="$ws/ontologies/$SCENARIO/prometheux.yaml"
   if [[ -f "$manifest" && "${PX_FRESH:-}" != "1" ]]; then
     saved_id="$(sed -n 's/^[[:space:]]*id:[[:space:]]*//p' "$manifest" | head -1 || true)"
   fi
   if [[ "${PX_FRESH:-}" == "1" && -f "$STATE_DIR/$SCENARIO/last_id" ]]; then
-    warn "PX_FRESH=1: previous project $(cat "$STATE_DIR/$SCENARIO/last_id") is now orphaned on the account (no CLI delete)."
+    warn "PX_FRESH=1: previous ontology $(cat "$STATE_DIR/$SCENARIO/last_id") is left behind on the account (remove with: px delete <id> -y)."
   fi
   rm -rf "$ws"
   mkdir -p "$ws"
   WS="$ws"
-  SAVED_PROJECT_ID="$saved_id"
+  SAVED_ONTOLOGY_ID="$saved_id"
   if [[ -n "$saved_id" ]]; then
-    info "reusing project id $saved_id (set PX_FRESH=1 to start a new one)"
+    info "reusing ontology id $saved_id (set PX_FRESH=1 to start a new one)"
   fi
 }
 
-# Record the applied project id for next run's reuse + the orphan warning.
-remember_project_id() {
-  local manifest="$WS/projects/$SCENARIO/prometheux.yaml"
+# Record the applied ontology id for next run's reuse + the leftover warning.
+remember_ontology_id() {
+  local manifest="$WS/ontologies/$SCENARIO/prometheux.yaml"
   [[ -f "$manifest" ]] || return 0
   sed -n 's/^[[:space:]]*id:[[:space:]]*//p' "$manifest" | head -1 > "$STATE_DIR/$SCENARIO/last_id" || true
 }

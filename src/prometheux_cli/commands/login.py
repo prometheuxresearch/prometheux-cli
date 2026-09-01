@@ -30,7 +30,7 @@ def login(url: str, token: str, no_verify: bool) -> None:
             px = load_sdk()
             px.config.set(credentials.ENV_URL, resolved_url)
             px.config.set(credentials.ENV_TOKEN, resolved_token)
-            ontologies = px.list_ontologies(["user"])
+            ontologies = px.list_ontologies()
         except SdkError as exc:
             click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
             sys.exit(1)

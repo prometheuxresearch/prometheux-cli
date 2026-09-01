@@ -14,9 +14,8 @@ from ..sdk import SdkError, connected_sdk, rest_data
 @click.argument("ontology_id")
 @click.argument("concept_name")
 @click.argument("sql")
-@click.option("--scope", default="user", type=click.Choice(["user", "organization"]))
 @click.option("--json", "as_json", is_flag=True, help="Emit raw JSON instead of a table.")
-def query(ontology_id: str, concept_name: str, sql: str, scope: str, as_json: bool) -> None:
+def query(ontology_id: str, concept_name: str, sql: str, as_json: bool) -> None:
     """Run SQL (a single SELECT/WITH) over CONCEPT_NAME in ONTOLOGY_ID.
 
     Example: px query 1db22ad122a tx "SELECT country, count(*) FROM tx GROUP BY country"
@@ -25,7 +24,6 @@ def query(ontology_id: str, concept_name: str, sql: str, scope: str, as_json: bo
         connected_sdk(require_token=True)
         data = rest_data(
             "POST", f"/api/v1/concepts/{ontology_id}/query",
-            params={"scope": scope},
             json={"concept_name": concept_name, "sql": sql},
         ) or {}
     except SdkError as exc:
