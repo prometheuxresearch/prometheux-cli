@@ -14,6 +14,10 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+### Fixed
+- `px apply` recognizes the `ontologies_*` export table (project → ontology rename), so an existing ontology is updated instead of treated as missing.
+- `px apply` inlines `annotations.param_annotations` (`@param`) into the saved definition so `${date_from}` / `${site}` concepts can run.
+
 ## [0.2.0] - 2026-08-13
 
 ### Changed (breaking)
