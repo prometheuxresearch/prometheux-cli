@@ -14,7 +14,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WS="$HERE/workspace"
 PX="${PX:-px}"
-PROJ="$WS/projects/customers"
+ONTO="$WS/ontologies/customers"
 
 : "${JARVISPY_URL:?set JARVISPY_URL, e.g. https://api.prometheux.ai/jarvispy/<org>/<user>}"
 : "${PMTX_TOKEN:?set PMTX_TOKEN (your account JWT)}"
@@ -24,17 +24,17 @@ say() { printf '\n\033[1m▸ %s\033[0m\n' "$*"; }
 
 if [[ ! -f "$WS/prometheux.workspace.yaml" ]]; then
   say "Authoring workspace at $WS (first run)"
-  mkdir -p "$PROJ"/{concepts,datasources,files}
+  mkdir -p "$ONTO"/{concepts,datasources,files}
 
   # --- the customer's raw data (the "dropped CSVs") ---
-  cat > "$PROJ/files/customers.csv" <<'CSV'
+  cat > "$ONTO/files/customers.csv" <<'CSV'
 Id,Name,Country
 c1,Ada Lovelace,UK
 c2,Alan Turing,UK
 c3,Grace Hopper,US
 c4,Edsger Dijkstra,NL
 CSV
-  cat > "$PROJ/files/orders.csv" <<'CSV'
+  cat > "$ONTO/files/orders.csv" <<'CSV'
 OrderId,CustomerId,Amount
 o1,c1,120
 o2,c1,80
@@ -42,20 +42,19 @@ o3,c3,300
 o4,c4,50
 CSV
 
-  # --- workspace + project manifests ---
+  # --- workspace + ontology manifests ---
   cat > "$WS/prometheux.workspace.yaml" <<'YAML'
 schemaVersion: 1
 workspace:
   name: csv-to-kg-example
-projects:
-  - ./projects/customers
+ontologies:
+  - ./ontologies/customers
 YAML
-  # No `id:` — the first `apply` creates the project and writes its id back here.
-  cat > "$PROJ/prometheux.yaml" <<'YAML'
+  # No `id:` — the first `apply` creates the ontology and writes its id back here.
+  cat > "$ONTO/prometheux.yaml" <<'YAML'
 schemaVersion: 1
-project:
+ontology:
   name: Customers Example
-  scope: user
 datasources:
   - ./datasources/customers_csv.yaml
   - ./datasources/orders_csv.yaml
@@ -63,13 +62,13 @@ concepts: ./concepts
 YAML
 
   # --- datasources: local CSV files (uploaded + connected on apply) ---
-  cat > "$PROJ/datasources/customers_csv.yaml" <<'YAML'
+  cat > "$ONTO/datasources/customers_csv.yaml" <<'YAML'
 name: customers_csv
 type: csv
 file: ../files/customers.csv
 useHeaders: "true"
 YAML
-  cat > "$PROJ/datasources/orders_csv.yaml" <<'YAML'
+  cat > "$ONTO/datasources/orders_csv.yaml" <<'YAML'
 name: orders_csv
 type: csv
 file: ../files/orders.csv
@@ -78,12 +77,12 @@ YAML
 
   # --- concepts: two ingest + one derived join ---
   # A concept = a body file (<predicate>.vadalog) + a <predicate>.meta.yaml envelope.
-  cat > "$PROJ/concepts/customer.vadalog" <<'VL'
+  cat > "$ONTO/concepts/customer.vadalog" <<'VL'
 % Ingest customers from the uploaded CSV. source_customers is bound to the
 % datasource in the meta file, so it is an INPUT edge; `customer` is the output.
 customer(Id, Name, Country) :- source_customers(Id, Name, Country).
 VL
-  cat > "$PROJ/concepts/customer.meta.yaml" <<'YAML'
+  cat > "$ONTO/concepts/customer.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: customer
 group: ingest
@@ -94,10 +93,10 @@ binds:
       table_name: customers.csv
 YAML
 
-  cat > "$PROJ/concepts/order.vadalog" <<'VL'
+  cat > "$ONTO/concepts/order.vadalog" <<'VL'
 order(OrderId, CustomerId, Amount) :- source_orders(OrderId, CustomerId, Amount).
 VL
-  cat > "$PROJ/concepts/order.meta.yaml" <<'YAML'
+  cat > "$ONTO/concepts/order.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: order
 group: ingest
@@ -110,12 +109,12 @@ YAML
 
   # Derived: the references to customer(...) and order(...) in the body ARE the
   # lineage edges — you never hand-write edges.
-  cat > "$PROJ/concepts/customer_order.vadalog" <<'VL'
+  cat > "$ONTO/concepts/customer_order.vadalog" <<'VL'
 customer_order(Name, Country, Amount) :-
     customer(Id, Name, Country),
     order(_, Id, Amount).
 VL
-  cat > "$PROJ/concepts/customer_order.meta.yaml" <<'YAML'
+  cat > "$ONTO/concepts/customer_order.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: customer_order
 group: derive

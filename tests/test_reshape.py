@@ -24,7 +24,7 @@ def test_reshape_body_is_faithful(export_dict):
 def _sql_export():
     pid = "p1"
     return {
-        "project_id": pid, "scope": "user",
+        "project_id": pid, 
         "tables": {
             "projects_workspace_id": {"data": [{"project_id": pid, "name": "P"}]},
             f"concepts_{pid}": {"data": [{
@@ -58,7 +58,7 @@ def test_reshape_sql_warns_when_source_missing():
 
 def _generative_export(concept_row):
     pid = "p1"
-    return {"project_id": pid, "scope": "user", "tables": {
+    return {"project_id": pid, "tables": {
         "projects_workspace_id": {"data": [{"project_id": pid, "name": "P"}]},
         f"concepts_{pid}": {"data": [concept_row]},
     }}
@@ -136,7 +136,7 @@ def test_reshape_never_serializes_secrets(export_dict):
 def _body_export(concept_row: dict) -> dict:
     pid = "p1"
     return {
-        "project_id": pid, "scope": "user",
+        "project_id": pid, 
         "tables": {
             "projects_workspace_id": {"data": [{"project_id": pid, "name": "P"}]},
             f"concepts_{pid}": {"data": [concept_row]},

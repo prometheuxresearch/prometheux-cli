@@ -47,7 +47,7 @@ def _ws(tmp_path: Path, bodies: dict, manifest: str):
     ctx = proj / "context"
     ctx.mkdir(parents=True, exist_ok=True)
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: pid1\n  name: P\n  scope: user\ncontext: ./context\n"
+        "schemaVersion: 1\nontology:\n  id: pid1\n  name: P\ncontext: ./context\n"
     )
     for name, text in bodies.items():
         (ctx / name).write_text(text)

@@ -19,12 +19,12 @@ hr; printf '%sScenario 2: GitOps state sync%s\n' "$C_BLD" "$C_RST"; hr
 require_auth
 new_workspace
 
-PROJ="$WS/projects/$SCENARIO"
-mkdir -p "$PROJ"/{concepts,datasources,files}
+ONTO="$WS/ontologies/$SCENARIO"
+mkdir -p "$ONTO"/{concepts,datasources,files}
 
 # --- base workspace ---------------------------------------------------------
 step "Author base workspace (1 source + 1 ingest + 1 derived)"
-cat > "$PROJ/files/items.csv" <<'CSV'
+cat > "$ONTO/files/items.csv" <<'CSV'
 Id,Name,Country,Price
 i1,Widget,UK,120
 i2,Gadget,US,80
@@ -36,32 +36,31 @@ cat > "$WS/prometheux.workspace.yaml" <<YAML
 schemaVersion: 1
 workspace:
   name: $SCENARIO
-projects:
-  - ./projects/$SCENARIO
+ontologies:
+  - ./ontologies/$SCENARIO
 YAML
 
 {
   echo "schemaVersion: 1"
-  echo "project:"
-  if [[ -n "${SAVED_PROJECT_ID:-}" ]]; then echo "  id: $SAVED_PROJECT_ID"; fi
+  echo "ontology:"
+  if [[ -n "${SAVED_ONTOLOGY_ID:-}" ]]; then echo "  id: $SAVED_ONTOLOGY_ID"; fi
   echo "  name: $SCENARIO"
-  echo "  scope: user"
   echo "datasources:"
   echo "  - ./datasources/items_csv.yaml"
   echo "concepts: ./concepts"
-} > "$PROJ/prometheux.yaml"
+} > "$ONTO/prometheux.yaml"
 
-cat > "$PROJ/datasources/items_csv.yaml" <<'YAML'
+cat > "$ONTO/datasources/items_csv.yaml" <<'YAML'
 name: items_csv
 type: csv
 file: ../files/items.csv
 useHeaders: "true"
 YAML
 
-cat > "$PROJ/concepts/item.vadalog" <<'VL'
+cat > "$ONTO/concepts/item.vadalog" <<'VL'
 item(Id, Name, Country, Price) :- source_items(Id, Name, Country, Price).
 VL
-cat > "$PROJ/concepts/item.meta.yaml" <<'YAML'
+cat > "$ONTO/concepts/item.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: item
 group: ingest
@@ -73,10 +72,10 @@ binds:
 YAML
 
 # domestic derives from item — the item(...) reference is the lineage edge.
-cat > "$PROJ/concepts/domestic.vadalog" <<'VL'
+cat > "$ONTO/concepts/domestic.vadalog" <<'VL'
 domestic(Name) :- item(_, Name, "UK", _).
 VL
-cat > "$PROJ/concepts/domestic.meta.yaml" <<'YAML'
+cat > "$ONTO/concepts/domestic.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: domestic
 group: derive
@@ -86,14 +85,14 @@ YAML
 step "Initial apply"
 assert_ok apply "$WS" --yes
 assert_out_lacks "skipped"
-remember_project_id
+remember_ontology_id
 
 step "Re-plan is clean"
 assert_plan_clean "$WS"
 
 # --- edit an UPSTREAM concept → update + cascade ----------------------------
 step "Edit upstream concept 'item' (real definition change)"
-cat > "$PROJ/concepts/item.vadalog" <<'VL'
+cat > "$ONTO/concepts/item.vadalog" <<'VL'
 % renamed vars: same arity/semantics, but the rule TEXT changed → definition diff
 item(ItemId, ItemName, ItemCountry, ItemPrice) :-
     source_items(ItemId, ItemName, ItemCountry, ItemPrice).
@@ -108,10 +107,10 @@ assert_plan_clean "$WS"
 
 # --- add a NEW concept → create ---------------------------------------------
 step "Add a new concept 'foreign'"
-cat > "$PROJ/concepts/foreign.vadalog" <<'VL'
+cat > "$ONTO/concepts/foreign.vadalog" <<'VL'
 foreign(Name, Country) :- item(_, Name, Country, _), Country != "UK".
 VL
-cat > "$PROJ/concepts/foreign.meta.yaml" <<'YAML'
+cat > "$ONTO/concepts/foreign.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: foreign
 group: derive
@@ -124,7 +123,7 @@ assert_plan_clean "$WS"
 
 # --- delete a concept file → safe-by-default, then --prune ------------------
 step "Delete the 'foreign' file — plan must WITHHOLD the delete"
-rm -f "$PROJ/concepts/foreign.vadalog" "$PROJ/concepts/foreign.meta.yaml"
+rm -f "$ONTO/concepts/foreign.vadalog" "$ONTO/concepts/foreign.meta.yaml"
 px_run plan "$WS" || true
 assert_out_has "- concept foreign"
 assert_out_has "delete (withheld"

@@ -26,15 +26,13 @@ def _connect():
 @click.argument("query_text")
 @click.option("--top-k", "top_k", default=5, show_default=True, help="Max matches.")
 @click.option("--exclude", "exclude_ontology_id", default="", help="Ontology id to exclude from results.")
-@click.option("--scope", default="user", type=click.Choice(["user", "organization"]))
-def concepts_cmd(query_text: str, top_k: int, exclude_ontology_id: str, scope: str) -> None:
+def concepts_cmd(query_text: str, top_k: int, exclude_ontology_id: str) -> None:
     """Find existing concepts across ontologies similar to QUERY_TEXT (to reuse)."""
     _connect()
     try:
         data = rest_data("GET", "/api/v1/concepts/search-similar", params={
             "query": query_text, "top_k": top_k,
             "exclude_project_id": exclude_ontology_id,  # wire alias for exclude_ontology_id
-            "scope": scope,
         }) or {}
     except SdkError as exc:
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)

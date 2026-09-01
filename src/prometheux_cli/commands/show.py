@@ -68,7 +68,7 @@ def show(concept, path, ontology_selectors, page, page_size, order_by, as_json):
     try:
         resp = px.fetch_results(
             ontology.id, concept, page=page, page_size=page_size,
-            scope=ontology.scope, order_by=order_by,
+            order_by=order_by,
         )
     except Exception as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": fetch of '{concept}' failed: {exc}", err=True)

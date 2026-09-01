@@ -50,7 +50,6 @@ class LocalOntology:
     slug: str
     id: Optional[str]
     name: str
-    scope: str
     concepts: List[LocalConcept] = field(default_factory=list)
     datasources: Dict[str, dict] = field(default_factory=dict)
     datasource_paths: Dict[str, Path] = field(default_factory=dict)
@@ -108,7 +107,6 @@ def _load_ontology(onto_dir: Path, ref: str) -> LocalOntology:
         slug=slug,
         id=meta.get("id"),
         name=meta.get("name") or slug,
-        scope=meta.get("scope") or "user",
         directory=onto_dir,
         manifest_path=onto_dir / "prometheux.yaml",
     )

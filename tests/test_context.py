@@ -21,7 +21,7 @@ def _ws(tmp_path: Path):
     proj = tmp_path / "ontologies" / "p"
     (proj / "context").mkdir(parents=True)
     (proj / "prometheux.yaml").write_text(
-        "schemaVersion: 1\nontology:\n  id: pid1\n  name: P\n  scope: user\ncontext: ./context\n"
+        "schemaVersion: 1\nontology:\n  id: pid1\n  name: P\ncontext: ./context\n"
     )
     (proj / "context" / "domain.context.md").write_text(
         "---\nscope: project\nactivation: always\nkind: rule\nnotes:\n  - policy.md\n"
