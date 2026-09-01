@@ -2,7 +2,7 @@ from prometheux_cli.loader import LocalOntology, select_ontologies
 
 
 def _p(slug, name, pid):
-    return LocalOntology(slug=slug, id=pid, name=name, scope="user")
+    return LocalOntology(slug=slug, id=pid, name=name)
 
 
 PROJECTS = [

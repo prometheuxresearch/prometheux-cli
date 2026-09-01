@@ -5,13 +5,13 @@ from prometheux_cli.cli import cli
 
 
 class _FakePx:
-    def list_ontologies(self, scopes):
+    def list_ontologies(self):
         return [{"id": "abc123", "name": "Al Dente", "author": "mozart"}]
 
-    def list_all_apps(self, scope):
+    def list_all_apps(self):
         return [{"id": "app-1", "name": "Risk", "project_name": "Al Dente", "status": "draft"}]
 
-    def list_sources(self, scope):
+    def list_sources(self):
         return [{"id": "ds-1", "table_name": "orders.csv", "datasource_type": "csv",
                  "predicate_placeholder": "orders_csv"}]
 
@@ -64,11 +64,11 @@ def test_list_context_project_requires_id(monkeypatch):
 
 def test_list_empty(monkeypatch):
     class _Empty(_FakePx):
-        def list_ontologies(self, scopes):
+        def list_ontologies(self):
             return []
 
     monkeypatch.setattr(cli_module.list_cmd, "connected_sdk",
                         lambda **k: (_Empty(), "http://x", "tok"))
     result = CliRunner().invoke(cli, ["list", "ontologies"])
     assert result.exit_code == 0, result.output
-    assert "No user-scoped ontologies." in result.output
+    assert "No ontologies." in result.output

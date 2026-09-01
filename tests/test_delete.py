@@ -11,13 +11,13 @@ from prometheux_cli.commands import delete as delete_cmd
 class _FakePx:
     def __init__(self, projects):
         self._projects = projects
-        self.deleted = []  # (ontology_id, ontology_scope)
+        self.deleted = []  # ontology_id
 
-    def list_ontologies(self, scopes):
+    def list_ontologies(self):
         return self._projects
 
-    def cleanup_ontologies(self, ontology_id=None, ontology_scope="user"):
-        self.deleted.append((ontology_id, ontology_scope))
+    def cleanup_ontologies(self, ontology_id=None):
+        self.deleted.append(ontology_id)
         return {"status": "success"}
 
 
@@ -31,7 +31,7 @@ def test_delete_by_id_with_yes(monkeypatch):
 
     result = CliRunner().invoke(cli, ["delete", "abc123", "--yes"])
     assert result.exit_code == 0, result.output
-    assert fake.deleted == [("abc123", "user")]
+    assert fake.deleted == ["abc123"]
     assert "Deleted" in result.output
 
 
@@ -41,7 +41,7 @@ def test_delete_by_name(monkeypatch):
 
     result = CliRunner().invoke(cli, ["delete", "Demo", "--yes"])
     assert result.exit_code == 0, result.output
-    assert fake.deleted == [("abc123", "user")]
+    assert fake.deleted == ["abc123"]
 
 
 def test_delete_prompt_abort_does_not_delete(monkeypatch):
@@ -61,7 +61,7 @@ def test_delete_unknown_project_fails(monkeypatch):
     result = CliRunner().invoke(cli, ["delete", "nope", "--yes"])
     assert result.exit_code == 1
     assert fake.deleted == []
-    assert "no user-scoped ontology" in result.output
+    assert "no ontology matches" in result.output
 
 
 def test_delete_ambiguous_name_fails(monkeypatch):

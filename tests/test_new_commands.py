@@ -12,7 +12,7 @@ class _FakePx:
         self.calls = []
 
     # concepts / context
-    def list_concepts(self, ontology_id, scope="user"):
+    def list_concepts(self, ontology_id):
         return [{"predicate_name": "customer", "concept_type": "logic",
                  "group": "g", "is_populated": True}]
 
@@ -20,42 +20,42 @@ class _FakePx:
         return [{"id": "n1", "kind": "fact", "text": "hello world"}]
 
     # snapshots
-    def list_snapshots(self, ontology_id, scope="user"):
+    def list_snapshots(self, ontology_id):
         return [{"id": "snap1", "created_at": "2026-01-01T00:00:00", "description": "d"}]
 
-    def create_snapshot(self, ontology_id, scope="user", description=None):
+    def create_snapshot(self, ontology_id, description=None):
         self.calls.append(("create_snapshot", ontology_id)); return {"id": "snapNEW"}
 
-    def restore_snapshot(self, snapshot_id, ontology_id, scope="user", create_safety_snapshot=True):
+    def restore_snapshot(self, snapshot_id, ontology_id, create_safety_snapshot=True):
         self.calls.append(("restore", snapshot_id, create_safety_snapshot))
 
-    def delete_snapshot(self, snapshot_id, ontology_id, scope="user"):
+    def delete_snapshot(self, snapshot_id, ontology_id):
         self.calls.append(("delete_snapshot", snapshot_id))
 
     # policies
-    def list_policies(self, ontology_id, scope="user", concept_name=None):
+    def list_policies(self, ontology_id, concept_name=None):
         return [{"id": "p1", "enabled": True, "trigger_type": "cron", "concept_name": "customer"}]
 
     def create_policy(self, ontology_id, concept_name, trigger_type="cron",
-                      trigger_config=None, scope="user", enabled=True):
+                      trigger_config=None, enabled=True):
         self.calls.append(("create_policy", concept_name, trigger_type, trigger_config, enabled))
         return {"id": "pNEW"}
 
-    def trigger_policy(self, ontology_id, policy_id, scope="user"):
+    def trigger_policy(self, ontology_id, policy_id):
         self.calls.append(("trigger", policy_id))
 
     # templates
     def list_templates(self):
         return [{"id": "t1", "name": "Al Dente"}]
 
-    def import_template(self, template_id, new_ontology_name=None, ontology_scope="user", compute=None):
+    def import_template(self, template_id, new_ontology_name=None, ontology_compute=None):
         self.calls.append(("import", template_id, new_ontology_name)); return {"id": "ontNEW"}
 
     # datasources
-    def preview_datasource(self, bind_annotation, scope="user", limit=10, **kw):
+    def preview_datasource(self, bind_annotation, limit=10, **kw):
         return {"facts": [[1, 2]], "columnNames": ["a", "b"]}
 
-    def list_sources(self, scope="user"):
+    def list_sources(self):
         return [{"id": "ds1", "bind_annotation": '@bind("p","csv","h","t").',
                  "predicate_placeholder": "p"}]
 

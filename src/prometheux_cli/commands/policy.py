@@ -14,8 +14,6 @@ import click
 
 from ..sdk import SdkError, connected_sdk, rest_data
 
-_SCOPE = click.option("--scope", default="user", type=click.Choice(["user", "organization"]))
-
 
 @click.group()
 def policy() -> None:
@@ -49,12 +47,11 @@ def _parse_config(cron, config):
 @policy.command("list")
 @click.argument("ontology_id")
 @click.option("--concept", "concept_name", default=None, help="Only policies for this concept.")
-@_SCOPE
-def list_cmd(ontology_id: str, concept_name: str, scope: str) -> None:
+def list_cmd(ontology_id: str, concept_name: str) -> None:
     """List policies for ONTOLOGY_ID."""
     px, url, _ = _connect()
     try:
-        rows = px.list_policies(ontology_id, scope, concept_name=concept_name) or []
+        rows = px.list_policies(ontology_id, concept_name=concept_name) or []
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     if not rows:
@@ -71,12 +68,11 @@ def list_cmd(ontology_id: str, concept_name: str, scope: str) -> None:
 @policy.command("get")
 @click.argument("ontology_id")
 @click.argument("policy_id")
-@_SCOPE
-def get_cmd(ontology_id: str, policy_id: str, scope: str) -> None:
+def get_cmd(ontology_id: str, policy_id: str) -> None:
     """Show one policy's full config + last-run status."""
     px, _, _ = _connect()
     try:
-        p = px.get_policy(ontology_id, policy_id, scope)
+        p = px.get_policy(ontology_id, policy_id)
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     click.echo(_json.dumps(p, indent=2, default=str))
@@ -90,14 +86,13 @@ def get_cmd(ontology_id: str, policy_id: str, scope: str) -> None:
 @click.option("--cron", default=None, help="Cron expression (for --trigger-type cron).")
 @click.option("--config", default=None, help="Raw trigger_config as a JSON object.")
 @click.option("--disabled", is_flag=True, help="Create the policy disabled.")
-@_SCOPE
-def create_cmd(ontology_id, concept_name, trigger_type, cron, config, disabled, scope) -> None:
+def create_cmd(ontology_id, concept_name, trigger_type, cron, config, disabled) -> None:
     """Create a policy that runs CONCEPT_NAME on a schedule/trigger."""
     trigger_config = _parse_config(cron, config)
     px, _, _ = _connect()
     try:
         res = px.create_policy(ontology_id, concept_name, trigger_type=trigger_type,
-                               trigger_config=trigger_config, scope=scope, enabled=not disabled) or {}
+                               trigger_config=trigger_config, enabled=not disabled) or {}
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     pid = res.get("id") if isinstance(res, dict) else res
@@ -111,15 +106,14 @@ def create_cmd(ontology_id, concept_name, trigger_type, cron, config, disabled, 
 @click.option("--cron", default=None, help="New cron expression.")
 @click.option("--config", default=None, help="New trigger_config as a JSON object.")
 @click.option("--enable/--disable", "enabled", default=None, help="Enable or disable the policy.")
-@_SCOPE
-def update_cmd(ontology_id, policy_id, cron, config, enabled, scope) -> None:
+def update_cmd(ontology_id, policy_id, cron, config, enabled) -> None:
     """Change a policy's schedule and/or enabled state."""
     trigger_config = _parse_config(cron, config)
     if trigger_config is None and enabled is None:
         _fail("nothing to update — pass --cron/--config and/or --enable/--disable.")
     px, _, _ = _connect()
     try:
-        px.update_policy(ontology_id, policy_id, scope=scope,
+        px.update_policy(ontology_id, policy_id,
                          trigger_config=trigger_config, enabled=enabled)
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
@@ -130,15 +124,14 @@ def update_cmd(ontology_id, policy_id, cron, config, enabled, scope) -> None:
 @click.argument("ontology_id")
 @click.argument("policy_id")
 @click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
-@_SCOPE
-def delete_cmd(ontology_id, policy_id, assume_yes, scope) -> None:
+def delete_cmd(ontology_id, policy_id, assume_yes) -> None:
     """Delete a policy (and unschedule it)."""
     if not assume_yes and not click.confirm(f"Delete policy {policy_id}?", default=False):
         click.echo("Aborted.")
         sys.exit(1)
     px, _, _ = _connect()
     try:
-        px.delete_policy(ontology_id, policy_id, scope)
+        px.delete_policy(ontology_id, policy_id)
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     click.echo(click.style("Deleted policy", fg="green", bold=True) + f" {policy_id}.")
@@ -147,12 +140,11 @@ def delete_cmd(ontology_id, policy_id, assume_yes, scope) -> None:
 @policy.command("trigger")
 @click.argument("ontology_id")
 @click.argument("policy_id")
-@_SCOPE
-def trigger_cmd(ontology_id, policy_id, scope) -> None:
+def trigger_cmd(ontology_id, policy_id) -> None:
     """Run a policy's concept immediately."""
     px, _, _ = _connect()
     try:
-        px.trigger_policy(ontology_id, policy_id, scope)
+        px.trigger_policy(ontology_id, policy_id)
     except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     click.echo(click.style("Triggered policy", fg="green", bold=True) + f" {policy_id}.")
@@ -163,14 +155,13 @@ def trigger_cmd(ontology_id, policy_id, scope) -> None:
 @click.argument("policy_id")
 @click.option("--limit", default=50, show_default=True, help="Max runs to show.")
 @click.option("--offset", default=0, help="Skip this many runs.")
-@_SCOPE
-def runs_cmd(ontology_id, policy_id, limit, offset, scope) -> None:
+def runs_cmd(ontology_id, policy_id, limit, offset) -> None:
     """Show a policy's execution history."""
     _connect()
     try:
         data = rest_data(
             "GET", f"/api/v1/schedules/{ontology_id}/policies/{policy_id}/runs",
-            params={"scope": scope, "limit": limit, "offset": offset},
+            params={"limit": limit, "offset": offset},
         ) or {}
     except SdkError as exc:
         _fail(str(exc))

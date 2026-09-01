@@ -21,8 +21,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 WS="${WORKSPACE:-$HERE/workspace}"
 INTERVAL="${1:-5}"
 PX="${PX:-px}"
-PROJ="$WS/projects/ctx"
-VAULT="$PROJ/context"
+ONTO="$WS/ontologies/ctx"
+VAULT="$ONTO/context"
 MANIFEST="$VAULT/notes.context.md"
 
 : "${JARVISPY_URL:?set JARVISPY_URL, e.g. https://api.prometheux.ai/jarvispy/<org>/<user>}"
@@ -31,26 +31,25 @@ export JARVISPY_URL PMTX_TOKEN
 command -v "$PX" >/dev/null 2>&1 || { echo "FATAL: '$PX' not found on PATH (set PX=...)." >&2; exit 2; }
 
 # Scaffold the workspace on first run (needs ONTOLOGY_ID to know where to push).
-if [[ ! -f "$PROJ/prometheux.yaml" ]]; then
-  : "${ONTOLOGY_ID:?first run: set ONTOLOGY_ID to the project id these notes should attach to}"
-  mkdir -p "$PROJ/concepts" "$VAULT"
+if [[ ! -f "$ONTO/prometheux.yaml" ]]; then
+  : "${ONTOLOGY_ID:?first run: set ONTOLOGY_ID to the ontology id these notes should attach to}"
+  mkdir -p "$ONTO/concepts" "$VAULT"
   cat > "$WS/prometheux.workspace.yaml" <<'YAML'
 schemaVersion: 1
 workspace:
   name: continuous-context-example
-projects:
-  - ./projects/ctx
+ontologies:
+  - ./ontologies/ctx
 YAML
-  cat > "$PROJ/prometheux.yaml" <<YAML
+  cat > "$ONTO/prometheux.yaml" <<YAML
 schemaVersion: 1
-project:
+ontology:
   id: ${ONTOLOGY_ID}
   name: Continuous Context Example
-  scope: user
 concepts: ./concepts
 context: ./context
 YAML
-  echo "Scaffolded $WS → pushing context notes to project ${ONTOLOGY_ID}."
+  echo "Scaffolded $WS → pushing context notes to ontology ${ONTOLOGY_ID}."
 fi
 mkdir -p "$VAULT"
 

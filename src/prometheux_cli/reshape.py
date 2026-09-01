@@ -3,7 +3,7 @@
 The export shape (from prometheux_chain ``export_ontology``) is::
 
     {
-      "project_id": "...", "scope": "user",
+      "project_id": "...",
       "tables": {
         "projects_workspace_id":     {"schema": [...], "data": [ {..project row..} ]},
         "datasources_workspace_id":  {"schema": [...], "data": [ {..ds rows..} ]},
@@ -71,7 +71,6 @@ class FileOut:
 class ReshapeResult:
     ontology_id: str
     ontology_name: str
-    scope: str
     files: List[FileOut] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 
@@ -145,8 +144,7 @@ def reshape_ontology(export: dict, ontology_name: str, slug: str, sources: dict 
 
     # `project_id` / `projects_` are the server export's wire names — unchanged.
     ontology_id = export.get("project_id", "")
-    scope = export.get("scope", "user")
-    result = ReshapeResult(ontology_id=ontology_id, ontology_name=ontology_name, scope=scope)
+    result = ReshapeResult(ontology_id=ontology_id, ontology_name=ontology_name)
     base = f"ontologies/{slug}"
 
     # --- ontology manifest ------------------------------------------------
@@ -157,7 +155,7 @@ def reshape_ontology(export: dict, ontology_name: str, slug: str, sources: dict 
     manifest = {
         "$schema": "../../.px/schemas/ontology.schema.json",
         "schemaVersion": 1,
-        "ontology": {"id": ontology_id, "name": name, "scope": scope},
+        "ontology": {"id": ontology_id, "name": name},
         "concepts": "./concepts",
     }
     datasource_rows = _rows(_table(export, "datasources_"))

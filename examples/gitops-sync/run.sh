@@ -9,7 +9,7 @@
 #   delete a concept file → plan WITHHOLDS the delete → apply --prune removes it
 #
 # Because this is a guided walkthrough that mutates files, it re-authors the
-# workspace fresh each run (preserving the project id, so it updates ONE project).
+# workspace fresh each run (preserving the ontology id, so it updates ONE ontology).
 #
 # Prereqs: `px` installed; JARVISPY_URL + PMTX_TOKEN set (see ../README.md).
 
@@ -18,8 +18,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WS="$HERE/workspace"
 PX="${PX:-px}"
-PROJ="$WS/projects/catalog"
-MANIFEST="$PROJ/prometheux.yaml"
+ONTO="$WS/ontologies/catalog"
+MANIFEST="$ONTO/prometheux.yaml"
 
 : "${JARVISPY_URL:?set JARVISPY_URL, e.g. https://api.prometheux.ai/jarvispy/<org>/<user>}"
 : "${PMTX_TOKEN:?set PMTX_TOKEN (your account JWT)}"
@@ -28,14 +28,14 @@ export JARVISPY_URL PMTX_TOKEN
 say()  { printf '\n\033[1m▸ %s\033[0m\n' "$*"; }
 pause(){ printf '\033[2m   (press Enter to continue)\033[0m'; read -r _ || true; }
 
-# Preserve the project id from a previous run so we update one project.
+# Preserve the ontology id from a previous run so we update one ontology.
 PREV_ID="$(sed -n 's/^[[:space:]]*id:[[:space:]]*//p' "$MANIFEST" 2>/dev/null | head -1 || true)"
 
 say "Author base workspace (1 CSV source + 1 ingest + 1 derived concept)"
 rm -rf "$WS"
-mkdir -p "$PROJ"/{concepts,datasources,files}
+mkdir -p "$ONTO"/{concepts,datasources,files}
 
-cat > "$PROJ/files/items.csv" <<'CSV'
+cat > "$ONTO/files/items.csv" <<'CSV'
 Id,Name,Country,Price
 i1,Widget,UK,120
 i2,Gadget,US,80
@@ -47,32 +47,31 @@ cat > "$WS/prometheux.workspace.yaml" <<'YAML'
 schemaVersion: 1
 workspace:
   name: gitops-sync-example
-projects:
-  - ./projects/catalog
+ontologies:
+  - ./ontologies/catalog
 YAML
 
 {
   echo "schemaVersion: 1"
-  echo "project:"
+  echo "ontology:"
   if [[ -n "$PREV_ID" ]]; then echo "  id: $PREV_ID"; fi   # reuse across runs
   echo "  name: Catalog Example"
-  echo "  scope: user"
   echo "datasources:"
   echo "  - ./datasources/items_csv.yaml"
   echo "concepts: ./concepts"
 } > "$MANIFEST"
 
-cat > "$PROJ/datasources/items_csv.yaml" <<'YAML'
+cat > "$ONTO/datasources/items_csv.yaml" <<'YAML'
 name: items_csv
 type: csv
 file: ../files/items.csv
 useHeaders: "true"
 YAML
 
-cat > "$PROJ/concepts/item.vadalog" <<'VL'
+cat > "$ONTO/concepts/item.vadalog" <<'VL'
 item(Id, Name, Country, Price) :- source_items(Id, Name, Country, Price).
 VL
-cat > "$PROJ/concepts/item.meta.yaml" <<'YAML'
+cat > "$ONTO/concepts/item.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: item
 group: ingest
@@ -83,10 +82,10 @@ binds:
       table_name: items.csv
 YAML
 
-cat > "$PROJ/concepts/domestic.vadalog" <<'VL'
+cat > "$ONTO/concepts/domestic.vadalog" <<'VL'
 domestic(Name) :- item(_, Name, "UK", _).
 VL
-cat > "$PROJ/concepts/domestic.meta.yaml" <<'YAML'
+cat > "$ONTO/concepts/domestic.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: domestic
 group: derive
@@ -99,7 +98,7 @@ say "A fresh plan is now clean — files match the server (idempotent)"
 pause
 
 say "Edit the UPSTREAM concept 'item' (rename vars: same result, new rule text)"
-cat > "$PROJ/concepts/item.vadalog" <<'VL'
+cat > "$ONTO/concepts/item.vadalog" <<'VL'
 item(ItemId, ItemName, ItemCountry, ItemPrice) :-
     source_items(ItemId, ItemName, ItemCountry, ItemPrice).
 VL
@@ -110,10 +109,10 @@ say "apply the change"
 pause
 
 say "Add a NEW concept 'foreign'"
-cat > "$PROJ/concepts/foreign.vadalog" <<'VL'
+cat > "$ONTO/concepts/foreign.vadalog" <<'VL'
 foreign(Name, Country) :- item(_, Name, Country, _), Country != "UK".
 VL
-cat > "$PROJ/concepts/foreign.meta.yaml" <<'YAML'
+cat > "$ONTO/concepts/foreign.meta.yaml" <<'YAML'
 conceptType: logic
 outputPredicate: foreign
 group: derive
@@ -124,7 +123,7 @@ say "plan shows '+ concept foreign  create'"
 pause
 
 say "Delete the 'foreign' file — deletions are WITHHELD by default (safe)"
-rm -f "$PROJ/concepts/foreign.vadalog" "$PROJ/concepts/foreign.meta.yaml"
+rm -f "$ONTO/concepts/foreign.vadalog" "$ONTO/concepts/foreign.meta.yaml"
 say "plan shows '- concept foreign  delete (withheld — needs --prune)'"
 "$PX" plan "$WS"
 say "apply --prune actually removes it"

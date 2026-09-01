@@ -12,18 +12,13 @@
     "ontology": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "scope"],
+      "required": ["name"],
       "properties": {
         "id": {
           "type": "string",
           "description": "Server ontology id. Absent on a brand-new ontology; filled by the first apply/pull."
         },
-        "name": { "type": "string", "minLength": 1 },
-        "scope": {
-          "type": "string",
-          "enum": ["user", "organization"],
-          "description": "Resolved against YOUR identity only (never targets another user)."
-        }
+        "name": { "type": "string", "minLength": 1 }
       }
     },
     "datasources": {

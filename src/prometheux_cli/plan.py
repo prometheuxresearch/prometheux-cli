@@ -51,7 +51,6 @@ class AppChange:
 @dataclass
 class PlanResult:
     ontology_name: str
-    scope: str
     ontology_id: Optional[str]
     concept_changes: List[ConceptChange] = field(default_factory=list)
     datasource_changes: List[DatasourceChange] = field(default_factory=list)
@@ -165,7 +164,7 @@ def plan_ontology(local: LocalOntology, export: Optional[dict], note_resolver=No
     via ``list_apps``/``get_app`` — apps live in a renamed table the export can't
     reliably name, so they are diffed from this dedicated fetch instead.
     """
-    result = PlanResult(ontology_name=local.name, scope=local.scope, ontology_id=local.id)
+    result = PlanResult(ontology_name=local.name, ontology_id=local.id)
 
     server_rows = _table(export or {}, "concepts_")
     server = {r.get("predicate_name"): r for r in server_rows if r.get("predicate_name")}
@@ -358,7 +357,7 @@ def _diff_datasources(local: LocalOntology, export, server_datasources, result: 
     - **Name** against the ontology export: a pulled datasource is named by its
       server datasource_id, so its own re-plan stays clean.
 
-    Datasources are user-scoped and shared, so none are ever deleted.
+    Datasources belong to the account and are shared, so none are ever deleted.
     """
     server_by_key = {}
     for s in server_datasources or []:
@@ -387,14 +386,14 @@ def _diff_datasources(local: LocalOntology, export, server_datasources, result: 
             result.datasource_changes.append(DatasourceChange(name, "create"))
 
 
-def fetch_server_datasources(px, scope: str) -> List[dict]:
-    """Every datasource already connected on the account (user-scoped).
+def fetch_server_datasources(px) -> List[dict]:
+    """Every datasource already connected on the account.
 
     Used to match a local connection so apply can reuse its bind instead of
     re-connecting. Best-effort: returns ``[]`` if the endpoint is unavailable.
     """
     try:
-        return px.list_sources(scope=scope) or []
+        return px.list_sources() or []
     except Exception:  # noqa: BLE001 - never fail the plan over this
         return []
 
@@ -466,7 +465,7 @@ def _diff_apps(local: LocalOntology, server_apps, result: PlanResult) -> None:
             )
 
 
-def fetch_server_sources(px, ontology_id: str, scope: str) -> Dict[str, str]:
+def fetch_server_sources(px, ontology_id: str) -> Dict[str, str]:
     """Return ``{predicate: source query}`` for every sql/cypher concept.
 
     A sql/cypher concept stores transpiled Vadalog in ``definition``; the authored
@@ -476,7 +475,7 @@ def fetch_server_sources(px, ontology_id: str, scope: str) -> Dict[str, str]:
     returns ``{}`` if the endpoint is unavailable.
     """
     try:
-        concepts = px.list_concepts(ontology_id, scope) or []
+        concepts = px.list_concepts(ontology_id) or []
     except Exception:  # noqa: BLE001 - never fail the plan over this
         return {}
     sources: Dict[str, str] = {}
@@ -489,7 +488,7 @@ def fetch_server_sources(px, ontology_id: str, scope: str) -> Dict[str, str]:
     return sources
 
 
-def fetch_server_apps(px, ontology_id: str, scope: str) -> List[dict]:
+def fetch_server_apps(px, ontology_id: str) -> List[dict]:
     """Load every app's ``{id, name, definition}`` for an ontology (best-effort).
 
     Apps are fetched via ``list_apps`` + ``get_app`` rather than the ontology
@@ -498,7 +497,7 @@ def fetch_server_apps(px, ontology_id: str, scope: str) -> List[dict]:
     ontology has no apps or the endpoint is unavailable.
     """
     try:
-        metas = px.list_apps(ontology_id, scope) or []
+        metas = px.list_apps(ontology_id) or []
     except Exception:  # noqa: BLE001 - apps are optional; never fail the plan
         return []
     apps: List[dict] = []
@@ -507,7 +506,7 @@ def fetch_server_apps(px, ontology_id: str, scope: str) -> List[dict]:
         if not app_id:
             continue
         try:
-            full = px.get_app(ontology_id, app_id, scope) or {}
+            full = px.get_app(ontology_id, app_id) or {}
             apps.append({
                 "id": full.get("id") or app_id,
                 "name": full.get("name") or meta.get("name"),
