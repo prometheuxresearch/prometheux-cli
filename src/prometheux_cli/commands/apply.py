@@ -1,4 +1,15 @@
-"""`px apply` — write local changes to the platform, gated by a plan preview."""
+"""`px apply` — write local changes to the platform, gated by a plan preview.
+
+Unlike `px pull`, which just writes what the server's ``/export-tree`` returns,
+apply still runs the diff and the writes from here. The server has an
+``/apply-tree`` that does the same reconciliation for the web app, but it works
+from the tree alone: a tree carries no credentials, so it can only *match* an
+existing datasource, never create one. Apply can, because it is the side that
+holds the environment — it resolves ``${ENV_VAR}`` secrets (:func:`resolve_secrets`),
+connects new datasources, and uploads local files. Moving apply onto the endpoint
+would drop all three, so it waits until the endpoint can take secrets and file
+content from a caller.
+"""
 
 from __future__ import annotations
 
@@ -151,9 +162,7 @@ def _ontology_missing(export) -> bool:
     if not export:
         return True
     for name, tbl in (export.get("tables") or {}).items():
-        # Server export used to prefix the ontology row `projects_`; current
-        # wire name is `ontologies_` (project → ontology rename). Accept both.
-        if name.startswith(("projects_", "ontologies_")) and (tbl or {}).get("data"):
+        if name.startswith("ontologies_") and (tbl or {}).get("data"):
             return False
     return True
 

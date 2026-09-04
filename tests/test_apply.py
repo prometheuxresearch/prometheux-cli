@@ -60,8 +60,8 @@ def test_project_missing_detects_deleted_project():
     from prometheux_cli.commands.apply import _ontology_missing
     assert _ontology_missing(None) is True
     assert _ontology_missing({"tables": {}}) is True
-    assert _ontology_missing({"tables": {"projects_x": {"data": []}}}) is True
-    assert _ontology_missing({"tables": {"projects_x": {"data": [{"project_id": "x"}]}}}) is False
+    assert _ontology_missing({"tables": {"ontologies_x": {"data": []}}}) is True
+    assert _ontology_missing({"tables": {"ontologies_x": {"data": [{"ontology_id": "x"}]}}}) is False
     # Current export wire name after the project → ontology rename.
     assert _ontology_missing({"tables": {"ontologies_workspace_id": {"data": []}}}) is True
     assert _ontology_missing({"tables": {"ontologies_workspace_id": {"data": [{"id": "x"}]}}}) is False
@@ -293,11 +293,12 @@ def _wire(monkeypatch, fake):
 
 
 def _pull(runner, tmp_path):
+    """Seed a workspace from the recorded tree. Callers take the `pulls_tree` fixture."""
     assert runner.invoke(cli, ["pull", "abc123", "--out", str(tmp_path)]).exit_code == 0
     return tmp_path / "ontologies" / "al-dente-supply-chain" / "concepts"
 
 
-def test_apply_updates_edited_concept(tmp_path: Path, export_dict, monkeypatch):
+def test_apply_updates_edited_concept(tmp_path: Path, export_dict, monkeypatch, pulls_tree):
     fake = _FakePx(export_dict)
     _wire(monkeypatch, fake)
     runner = CliRunner()
@@ -317,7 +318,7 @@ def test_apply_updates_edited_concept(tmp_path: Path, export_dict, monkeypatch):
     assert "extra(Id, Name)" in saved["customer"]["definition"]
 
 
-def test_apply_creates_new_concept(tmp_path: Path, export_dict, monkeypatch):
+def test_apply_creates_new_concept(tmp_path: Path, export_dict, monkeypatch, pulls_tree):
     fake = _FakePx(export_dict)
     _wire(monkeypatch, fake)
     runner = CliRunner()
@@ -333,7 +334,7 @@ def test_apply_creates_new_concept(tmp_path: Path, export_dict, monkeypatch):
     assert "existing_name" not in saved["flag"]  # create
 
 
-def test_apply_abort_without_yes(tmp_path: Path, export_dict, monkeypatch):
+def test_apply_abort_without_yes(tmp_path: Path, export_dict, monkeypatch, pulls_tree):
     fake = _FakePx(export_dict)
     _wire(monkeypatch, fake)
     runner = CliRunner()
@@ -347,10 +348,10 @@ def test_apply_abort_without_yes(tmp_path: Path, export_dict, monkeypatch):
 
 def _empty_export():
     return {
-        "project_id": "abc123",
+        "ontology_id": "abc123",
         
         "tables": {
-            "projects_workspace_id": {"schema": [], "data": [{"project_id": "abc123", "name": "T"}]},
+            "ontologies_workspace_id": {"schema": [], "data": [{"ontology_id": "abc123", "name": "T"}]},
             "concepts_abc123": {"schema": [], "data": [], "row_count": 0},
             "datasources_workspace_id": {"schema": [], "data": [], "row_count": 0},
         },
@@ -435,7 +436,7 @@ def test_remap_app_project_ids_stale_foreign_id_falls_back_to_owning():
 def test_apply_rewrites_app_project_id_on_recreate(tmp_path: Path, monkeypatch):
     """A recreated project's app has its stale page project.id rewritten to the new id."""
     # server has no such project id -> triggers recreate; save_app captures the definition
-    fake = _FakePx({"project_id": "STALE", "tables": {}})  # _ontology_missing -> True
+    fake = _FakePx({"ontology_id": "STALE", "tables": {}})  # _ontology_missing -> True
     saved_defs = []
     fake.save_app = lambda ontology_id, app: (saved_defs.append(app), {"id": "app-x"})[1]
     fake.save_ontology = lambda oid, name, description=None: "NEWID"
@@ -890,7 +891,7 @@ def test_apply_prune_deletes_server_only_app(tmp_path: Path, monkeypatch):
     assert fake.apps_deleted == [("abc123", "gone")]
 
 
-def test_apply_prune_deletes(tmp_path: Path, export_dict, monkeypatch):
+def test_apply_prune_deletes(tmp_path: Path, export_dict, monkeypatch, pulls_tree):
     fake = _FakePx(export_dict)
     _wire(monkeypatch, fake)
     runner = CliRunner()
@@ -903,7 +904,7 @@ def test_apply_prune_deletes(tmp_path: Path, export_dict, monkeypatch):
     assert fake.pruned == ["risk"]
 
 
-def test_apply_pushes_edited_ontology(tmp_path: Path, export_dict, monkeypatch):
+def test_apply_pushes_edited_ontology(tmp_path: Path, export_dict, monkeypatch, pulls_tree):
     fake = _FakePx(export_dict)
     _wire(monkeypatch, fake)
     runner = CliRunner()
@@ -921,7 +922,7 @@ def test_apply_pushes_edited_ontology(tmp_path: Path, export_dict, monkeypatch):
     assert "ontology schema" in result.output
 
 
-def test_apply_skips_unchanged_ontology(tmp_path: Path, export_dict, monkeypatch):
+def test_apply_skips_unchanged_ontology(tmp_path: Path, export_dict, monkeypatch, pulls_tree):
     fake = _FakePx(export_dict)
     _wire(monkeypatch, fake)
     runner = CliRunner()
