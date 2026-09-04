@@ -14,6 +14,34 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.4.0] - 2026-09-04
+
+### Removed
+- **Breaking: `px` now requires a platform with the ontology file-tree endpoints.**
+  Support for pre-rename servers is gone: the CLI reads only `ontology_id` /
+  `ontologies_*` / `definition`, never the older `project_id` / `projects_*` /
+  `rules` spellings. Point `px` at an older platform and `px pull` stops with a
+  message telling you to update it — it no longer silently does something
+  different. Stay on `px` 0.3.x if you need to talk to one.
+- The reshape engine (`prometheux_cli/reshape.py`) is deleted. The server builds
+  the tree now, so a second implementation here could only drift from it. Its
+  test suite moved to `jarvispy` alongside the engine that survived.
+
+### Changed
+- `px pull` asks the server to build the file tree (`POST /ontologies/export-tree`)
+  and just writes the files down. A pull and an ontology exported from the web app
+  are byte-for-byte the same tree, so a workspace can be handed between terminal
+  and browser without either side re-serializing it differently.
+
+### Fixed
+- `px pull` writes the real ontology id into `prometheux.yaml` again. The server
+  renamed `project_id` → `ontology_id` and its registry table `projects_*` →
+  `ontologies_*`, and only writes the new spelling; reading the old one left
+  `ontology.id` and the ontology name both empty, so the pull landed in
+  `ontologies/<raw-id>/`, an immediate `px plan` reported every concept as a
+  create rather than "no changes", and `px apply` created a duplicate ontology
+  named after the id instead of updating the one the tree came from.
+
 ## [0.3.1] - 2026-09-01
 
 ### Fixed

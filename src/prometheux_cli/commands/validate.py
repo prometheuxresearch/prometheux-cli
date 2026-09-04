@@ -85,7 +85,7 @@ def _validate_online(root: Path) -> int:
                     "definition": c.body,
                     "concept_type": c.concept_type,
                     "concept_name": c.predicate,
-                    "project_id": onto.id,
+                    "ontology_id": onto.id,
                 }) or {}
             except SdkError as exc:
                 click.echo(f"  {click.style('error', fg='red')}  {onto.slug}/{c.predicate}: {exc}")
