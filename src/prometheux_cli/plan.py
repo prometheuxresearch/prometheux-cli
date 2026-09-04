@@ -18,10 +18,14 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 
 from .loader import LocalConcept, LocalOntology
-from .reshape import concept_body
 
 _PREDICATE_RE = re.compile(r"([a-zA-Z_]\w*)\s*\(")
 _TRUTHY = {True, "true", "True", "t", "1", 1}
+
+
+def concept_body(row: dict) -> str:
+    """The concept body out of a server export row."""
+    return row.get("definition") or ""
 
 
 @dataclass

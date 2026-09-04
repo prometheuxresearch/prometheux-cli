@@ -193,8 +193,8 @@ def test_ontology_update_when_differs(export_dict):
 
 
 def test_ontology_create_when_server_empty():
-    export = {"project_id": "abc123", "tables": {
-        "projects_workspace_id": {"data": [{"project_id": "abc123", "name": "T"}]},
+    export = {"ontology_id": "abc123", "tables": {
+        "ontologies_workspace_id": {"data": [{"ontology_id": "abc123", "name": "T"}]},
         "concepts_abc123": {"data": []},
     }}
     result = plan_ontology(_local_with_ontology({"nodes": [], "edges": []}), export)
@@ -205,8 +205,8 @@ def test_ontology_create_when_server_empty():
 def test_ontology_unchanged_ignores_server_derived_edge_id():
     # Server enriches edges with a derived `id`; a hand-authored edge omits it.
     server = '{"nodes": [{"id": "customer"}], "edges": [{"from": "customer", "to": "order", "label": "places", "id": "customer_places_order"}]}'
-    export = {"project_id": "abc123", "tables": {
-        "projects_workspace_id": {"data": [{"project_id": "abc123", "name": "T"}]},
+    export = {"ontology_id": "abc123", "tables": {
+        "ontologies_workspace_id": {"data": [{"ontology_id": "abc123", "name": "T"}]},
         "concepts_abc123": {"data": []},
         "ontology_schema_abc123": {"data": [{"ontology_schema_data": server}]},
     }}
@@ -234,8 +234,8 @@ def _sql_concept(pred, body):
 
 
 def _sql_server_export(pred):
-    return {"project_id": "abc123", "tables": {
-        "projects_workspace_id": {"data": [{"project_id": "abc123", "name": "P"}]},
+    return {"ontology_id": "abc123", "tables": {
+        "ontologies_workspace_id": {"data": [{"ontology_id": "abc123", "name": "P"}]},
         "concepts_abc123": {"data": [{
             "predicate_name": pred, "concept_type": "sql",
             "definition": f"{pred}(X) <- SELECT X FROM t.",
@@ -326,7 +326,7 @@ def _wire(monkeypatch, export):
     monkeypatch.setattr(cli_module.plan_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
 
 
-def test_pull_then_plan_no_changes(tmp_path: Path, export_dict, monkeypatch):
+def test_pull_then_plan_no_changes(tmp_path: Path, export_dict, monkeypatch, pulls_tree):
     _wire(monkeypatch, export_dict)
     runner = CliRunner()
     assert runner.invoke(cli, ["pull", "abc123", "--out", str(tmp_path)]).exit_code == 0
@@ -335,7 +335,7 @@ def test_pull_then_plan_no_changes(tmp_path: Path, export_dict, monkeypatch):
     assert "No changes" in result.output
 
 
-def test_pull_edit_then_plan_shows_cascade(tmp_path: Path, export_dict, monkeypatch):
+def test_pull_edit_then_plan_shows_cascade(tmp_path: Path, export_dict, monkeypatch, pulls_tree):
     _wire(monkeypatch, export_dict)
     runner = CliRunner()
     runner.invoke(cli, ["pull", "abc123", "--out", str(tmp_path)])

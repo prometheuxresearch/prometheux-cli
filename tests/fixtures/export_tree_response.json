@@ -1,0 +1,38 @@
+{
+  "ontology": {
+    "id": "abc123",
+    "name": "Al Dente Supply Chain",
+    "slug": "al-dente-supply-chain"
+  },
+  "files": [
+    {
+      "path": "ontologies/al-dente-supply-chain/prometheux.yaml",
+      "content": "$schema: ../../.px/schemas/ontology.schema.json\nschemaVersion: 1\nontology:\n  id: abc123\n  name: Al Dente Supply Chain\nconcepts: ./concepts\ndatasources:\n- ./datasources/snowflake_prod.yaml\nontologySchema: ./ontology/schema.yaml\n"
+    },
+    {
+      "path": "ontologies/al-dente-supply-chain/datasources/snowflake_prod.yaml",
+      "content": "$schema: ../../../.px/schemas/datasource.schema.json\nname: snowflake_prod\ntype: snowflake\nhost: acme.snowflakecomputing.com\ndatabase_name: PROD\n"
+    },
+    {
+      "path": "ontologies/al-dente-supply-chain/ontology/schema.yaml",
+      "content": "nodes: []\nedges: []\n"
+    },
+    {
+      "path": "ontologies/al-dente-supply-chain/concepts/customer.vadalog",
+      "content": "customer(Id, Name) :- source_customers(Id, Name).\n"
+    },
+    {
+      "path": "ontologies/al-dente-supply-chain/concepts/customer.meta.yaml",
+      "content": "$schema: ../../../.px/schemas/concept-meta.schema.json\nconceptType: logic\noutputPredicate: customer\ngroup: ingest\ndescription: Ingest customers.\nfields:\n- name: Id\n  type: string\n- name: Name\n  type: string\nannotations:\n  bind_annotations:\n    input: []\n    output: '@bind(\"customer\",\"parquet\",\"disk/results/abc123\",\"customer\")'\n"
+    },
+    {
+      "path": "ontologies/al-dente-supply-chain/concepts/risk.vadalog",
+      "content": "risk(Id) :- customer(Id, _).\n"
+    },
+    {
+      "path": "ontologies/al-dente-supply-chain/concepts/risk.meta.yaml",
+      "content": "$schema: ../../../.px/schemas/concept-meta.schema.json\nconceptType: logic\noutputPredicate: risk\nfields:\n- name: Id\n  type: string\n"
+    }
+  ],
+  "warnings": []
+}

@@ -23,7 +23,7 @@ dependencies = [
     # the backend now ignores on the JSON run path. (Earlier releases also
     # called the retired /ontologies/export-project and /import-project aliases
     # the backend no longer serves — pull/plan/apply would 404 against a current pod.)
-    "prometheux_chain>=0.4.2",
+    "prometheux_chain>=0.4.3",
 ]
 
 [project.optional-dependencies]

@@ -171,6 +171,11 @@ Authenticate and store URL + token. See [Authenticate](#authenticate).
 Export a live ontology into `ontologies/<slug>/` (concepts → body + `.meta.yaml`, datasources,
 ontology, apps). With **no** `ONTOLOGY`, lists the ontologies visible to you and exits.
 
+The tree is built server-side, so a `px pull` and an ontology exported from the web app give you
+the same files — you can pull what a colleague exported from the browser, and vice versa. This
+needs a platform that has the file-tree endpoints; against an older one `px pull` stops and says
+so. Use `px` 0.3.x if you have to talk to a platform that predates them.
+
 | Option | Meaning |
 |---|---|
 | `--out PATH` | Workspace directory (default: `.`). |
