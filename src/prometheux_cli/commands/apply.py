@@ -48,8 +48,11 @@ from .plan import _render
 @click.option("--with-files", "with_files", is_flag=True,
               help="Re-upload file datasources even when an identical one already exists "
                    "on the account (refresh content). New files always upload.")
+@click.option("--no-context", "no_context", is_flag=True,
+              help="Do not apply the project-scoped context layer of the applied ontologies "
+                   "(apply it separately with `px context apply`).")
 def apply(path: Path, ontology_selectors, assume_yes: bool, prune: bool, no_snapshot: bool,
-          with_files: bool) -> None:
+          with_files: bool, no_context: bool) -> None:
     """Apply the workspace to the platform.
 
     Shows the same diff as `px plan`, then (after confirmation) creates/updates
@@ -134,6 +137,26 @@ def apply(path: Path, ontology_selectors, assume_yes: bool, prune: bool, no_snap
             resolve_notes=resolve_notes, original_id=original_id, id_remap=id_remap)
         if ontology_skips:
             skipped[ontology.name] = ontology_skips
+
+    # Apply the applied ontologies' own (project-scoped) context so "apply the
+    # ontology" means everything ontology-related — concepts AND its context. The
+    # workspace-global context layer is left to `px context apply`, and --no-context
+    # opts out entirely. The apply-level confirm above already covered this, so it
+    # runs unprompted (assume_yes) and prune follows the same --prune flag, bounded
+    # server-side to only the applied ontologies' manifests.
+    if not no_context:
+        from .context import apply_context_layer
+        in_scope_ids = {o.id for o in ontologies if o.id}
+        apply_context_layer(
+            px, root, workspace,
+            note_filter=lambda n: n.scope == "project" and n.scope_id in in_scope_ids,
+            assume_yes=True, prune=prune, header="\nApplying context…",
+        )
+    elif any(root.rglob("*.context.md")):
+        click.echo(
+            "\n" + click.style("note", fg="yellow")
+            + ": context not applied (--no-context) — run `px context apply` to push it."
+        )
 
     if skipped:
         total = sum(len(v) for v in skipped.values())

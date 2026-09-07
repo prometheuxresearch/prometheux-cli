@@ -9,14 +9,13 @@ note-to-concept links are re-asserted each run (edges are idempotent server-side
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sys
 from pathlib import Path
 
 import click
 
-from ..context import collect_context
+from ..context import build_pulled_context, collect_context, note_content_hash
 from ..loader import load_workspace
 from ..sdk import SdkError, connected_sdk
 from ..validation import find_workspace_root
@@ -57,45 +56,140 @@ def context_search(query: str, scope: str, ontology_id: str, top_k: int) -> None
         click.echo(f"  {nid}  {click.style(kind, dim=True)}  {snippet}")
 
 
-@context.command("apply")
-@click.argument("path", required=False, type=click.Path(exists=True, file_okay=False, path_type=Path))
-@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
-@click.option("--prune", is_flag=True, help="Delete notes previously applied but no longer in any manifest.")
-def context_apply(path: Path, assume_yes: bool, prune: bool) -> None:
-    """Apply context notes + links from every *.context.md in the workspace (idempotent)."""
-    start = path or Path.cwd()
-    root = find_workspace_root(start)
-    if root is None:
-        click.echo(click.style("FAIL", fg="red", bold=True) + f": no prometheux.workspace.yaml in or above {start}", err=True)
-        sys.exit(2)
+def write_pulled_context_group(px, *, scope: str, scope_id, root: Path, out_dir: Path,
+                               manifest_name: str = "pulled.context.md") -> int:
+    """Pull the notes for one (scope, scope_id) into a `.context.md` set + seed state.
 
+    ``scope`` is the CLI frontmatter scope (``project`` | ``global``); the server
+    speaks ``ontology`` for project scope, so it's mapped here. Writes the manifest
+    and body files under ``out_dir`` and merges the seeded idempotency state into
+    ``root/.px/context-state.json`` so a following `px context apply` is a no-op.
+    Returns the number of notes written (0 when there are none). Shared by
+    `px pull` (project scope) and `px context pull` (global scope).
+    """
+    server_scope = "ontology" if scope == "project" else "global"
     try:
-        px, _, _ = connected_sdk(require_token=True)
+        notes = px.list_context_notes(server_scope, scope_id) or []
+    except Exception:  # noqa: BLE001 - context is optional; never fail the pull over it
+        return 0
+
+    manifest_abs = out_dir / manifest_name
+    try:
+        manifest_rel = str(manifest_abs.resolve().relative_to(root.resolve()))
+    except ValueError:
+        manifest_rel = manifest_name  # out_dir outside root — degrade, still writes files
+
+    built = build_pulled_context(notes, scope=scope, scope_id=scope_id, manifest_rel=manifest_rel)
+    if built is None:
+        return 0
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    manifest_abs.write_text(built.manifest_text, "utf-8")
+    for fname, text in built.body_files:
+        (out_dir / fname).write_text(text, "utf-8")
+
+    state = _load_state(root)
+    state.update(built.state_entries)
+    _save_state(root, state)
+    return built.count
+
+
+@context.command("pull")
+@click.option("--out", "out", default=".", type=click.Path(path_type=Path), help="Workspace directory.")
+@click.option("--ontology", "ontology_id", default=None,
+              help="Also pull this ontology's project-scoped notes into its directory.")
+def context_pull(out: Path, ontology_id: str) -> None:
+    """Pull global context notes into ./context (and, with --ontology, that ontology's notes).
+
+    Global notes land in `<workspace>/context/pulled.context.md`; the idempotency
+    state is seeded so the next `px context apply` reports no changes. `px pull`
+    already pulls an ontology's own project-scoped context, so this command's main
+    job is the workspace-global layer.
+    """
+    root = find_workspace_root(out.resolve())
+    if root is None:
+        click.echo(click.style("FAIL", fg="red", bold=True)
+                   + f": no prometheux.workspace.yaml in or above {out.resolve()}", err=True)
+        sys.exit(2)
+    try:
+        px, url, _ = connected_sdk(require_token=True)
     except SdkError as exc:
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
 
-    workspace = load_workspace(root)
+    total = write_pulled_context_group(px, scope="global", scope_id=None,
+                                       root=root, out_dir=root / "context")
+    click.echo(
+        (click.style("Pulled", fg="green", bold=True)
+         + f" {total} global context note(s) to {root / 'context'}.")
+        if total else "No global context notes to pull."
+    )
+
+    if ontology_id:
+        workspace = load_workspace(root)
+        onto = next((o for o in workspace.ontologies if o.id == ontology_id), None)
+        out_dir = (onto.directory / "context") if (onto and onto.directory) else (root / "context" / ontology_id)
+        n = write_pulled_context_group(px, scope="project", scope_id=ontology_id,
+                                       root=root, out_dir=out_dir)
+        click.echo(
+            (click.style("Pulled", fg="green", bold=True)
+             + f" {n} project note(s) for {ontology_id} to {out_dir}.")
+            if n else f"No project context notes for {ontology_id}."
+        )
+    click.echo("Next: `px context apply` (should report no changes)")
+
+
+def apply_context_layer(px, root: Path, workspace, *, note_filter=None,
+                        assume_yes: bool = False, prune: bool = False,
+                        header: str = None) -> bool:
+    """Apply context notes + links from the workspace's `*.context.md` (idempotent).
+
+    The shared core of `px context apply`; `px apply` calls it too, passing a
+    ``note_filter`` so it applies only the context that belongs to the ontologies
+    it just applied (project-scoped notes whose owning ontology is in scope).
+
+    - ``note_filter(note) -> bool`` restricts which notes are managed. When set
+      (the embedded call), pruning is bounded to the manifests those notes live in,
+      so an ontology apply never deletes another ontology's — or the global —
+      context. When None (the standalone command), everything is in scope.
+    - ``header`` prints a section title first (embedded call); standalone stays quiet.
+
+    Returns True on success or no-op, False only when the user declined the confirm.
+    """
     notes, links, warnings = collect_context(workspace)
+    if note_filter is not None:
+        notes = [n for n in notes if note_filter(n)]
     for w in warnings:
         click.echo(f"  {click.style('warning', fg='yellow')} {w}")
 
     state = _load_state(root)
+    # Embedded call with nothing in scope: say nothing, do nothing.
+    if note_filter is not None and not notes:
+        return True
     if not notes and not state:
         click.echo("No context notes found (no *.context.md manifests).")
-        return
+        return True
 
     adopted = _reconcile_with_server(notes, state)
     if adopted:
-        click.echo(f"  reconciled {adopted} note(s) with existing server notes (no duplicates)")
+        click.echo(f"  reconciled {adopted} note(s) with the server (adopted matches / healed stale ids)")
 
     plan = [(n, _classify(n, state)) for n in notes]
     seen_keys = {_ref_str(n) for n, _ in plan}
-    removed = [k for k in state if k not in seen_keys]
+    # When a filter is in play, only prune notes from manifests we actually manage
+    # this run — never global or other-ontology notes that were filtered out.
+    prune_manifests = {n.ref_key[0] for n, _ in plan} if note_filter is not None else None
+    removed = [
+        k for k in state
+        if k not in seen_keys and (prune_manifests is None or k.split("::", 1)[0] in prune_manifests)
+    ]
 
     counts = {"create": 0, "update": 0, "unchanged": 0}
     for _, action in plan:
         counts[action] += 1
+
+    if header:
+        click.echo(header)
     click.echo(
         f"\nContext plan: {counts['create']} create, {counts['update']} update, "
         f"{counts['unchanged']} unchanged, {len(links)} link(s)"
@@ -113,7 +207,7 @@ def context_apply(path: Path, assume_yes: bool, prune: bool) -> None:
         click.echo("\nContext up to date. Re-asserting links.")
     elif not assume_yes and not click.confirm("\nApply context?", default=False):
         click.echo("Aborted.")
-        sys.exit(1)
+        return False
 
     new_state = dict(state)
     ids = {}
@@ -151,7 +245,7 @@ def context_apply(path: Path, assume_yes: bool, prune: bool) -> None:
     for link in links:
         src, dst = _endpoint_ref(link.src, ids), _endpoint_ref(link.dst, ids)
         if src is None or dst is None:
-            continue
+            continue  # an endpoint outside the managed set (e.g. filtered out) — skip
         try:
             _create_edge(px, src, dst, link.relation)
             edges += 1
@@ -164,6 +258,30 @@ def context_apply(path: Path, assume_yes: bool, prune: bool) -> None:
         + f": {counts['create']} created, {counts['update']} updated, "
         f"{counts['unchanged']} unchanged, {pruned} pruned, {edges} link(s)."
     )
+    return True
+
+
+@context.command("apply")
+@click.argument("path", required=False, type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--yes", "-y", "assume_yes", is_flag=True, help="Skip the confirmation prompt.")
+@click.option("--prune", is_flag=True, help="Delete notes previously applied but no longer in any manifest.")
+def context_apply(path: Path, assume_yes: bool, prune: bool) -> None:
+    """Apply context notes + links from every *.context.md in the workspace (idempotent)."""
+    start = path or Path.cwd()
+    root = find_workspace_root(start)
+    if root is None:
+        click.echo(click.style("FAIL", fg="red", bold=True) + f": no prometheux.workspace.yaml in or above {start}", err=True)
+        sys.exit(2)
+
+    try:
+        px, _, _ = connected_sdk(require_token=True)
+    except SdkError as exc:
+        click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
+        sys.exit(1)
+
+    workspace = load_workspace(root)
+    if not apply_context_layer(px, root, workspace, assume_yes=assume_yes, prune=prune):
+        sys.exit(1)
 
 
 # ── state + classification ────────────────────────────────────────────────
@@ -173,8 +291,7 @@ def _ref_str(note) -> str:
 
 
 def _hash(note) -> str:
-    payload = "|".join([note.scope, note.scope_id or "", note.kind, note.activation, note.text])
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return note_content_hash(note.scope, note.scope_id, note.kind, note.activation, note.text)
 
 
 def _classify(note, state) -> str:
@@ -185,44 +302,87 @@ def _classify(note, state) -> str:
 
 
 def _reconcile_with_server(notes, state) -> int:
-    """Adopt matching server notes into local state before classifying.
+    """Reconcile local state with the server's notes before classifying.
 
-    The idempotency state (`.px/context-state.json`) is local and easily lost
-    (fresh checkout, another machine, CI, corruption). Without this, every note
-    then reclassifies as `create` and is pushed again, duplicating notes already
-    on the server. Here we look up the server's existing notes for each
-    (scope, scope_id) and, for any local note not in state whose text matches an
-    existing note, adopt that note's id — so it classifies as unchanged/update,
-    never a duplicate create. Returns the number of notes adopted.
+    The idempotency state (`.px/context-state.json`) drifts from the server two
+    ways, and both would corrupt the plan:
+
+    - **Missing from state** (fresh checkout, another machine, CI, corruption, or
+      the state seeded by `px pull`). Without reconciling, every note reclassifies
+      as `create` and is pushed again, duplicating notes already on the server. We
+      adopt the server note whose text matches, so it classifies unchanged/update.
+
+    - **Stale id in state** — the state names a note id that no longer exists on
+      the server (the ontology was deleted and recreated, so its notes — and their
+      ids — are gone; or the note was deleted directly). Left alone, the note
+      classifies as unchanged/update and we would skip it or PATCH a dead id, so
+      the note is silently never restored. We re-adopt by text when the server has
+      a matching note, otherwise drop the entry so it re-creates cleanly.
+
+    Returns the number of notes reconciled (adopted or healed).
     """
-    missing = [n for n in notes if _ref_str(n) not in state]
-    if not missing:
+    if not notes:
         return 0
     try:
         from prometheux_chain.client.jarvispy_client import JarvisPyClient
     except Exception:  # noqa: BLE001 - SDK missing → skip reconcile
         return 0
 
-    index: dict = {}  # (scope, scope_id) -> {text: note_id}
-    adopted = 0
-    for n in missing:
-        key = (n.scope, n.scope_id)
-        if key not in index:
-            by_text: dict = {}
-            try:
-                resp = JarvisPyClient.list_context_notes(n.scope, n.scope_id)
-                for sn in ((resp or {}).get("data") or []):
+    index: dict = {}      # (scope, scope_id) -> {text: note_id}
+    live_ids: dict = {}   # (scope, scope_id) -> {note_id, …}
+    loaded_ok: dict = {}  # (scope, scope_id) -> did the server list succeed?
+
+    def _load(scope, scope_id) -> None:
+        key = (scope, scope_id)
+        if key in index:
+            return
+        by_text: dict = {}
+        ids: set = set()
+        ok = False
+        try:
+            resp = JarvisPyClient.list_context_notes(scope, scope_id)
+            data = (resp or {}).get("data")
+            if isinstance(data, list):
+                ok = True  # a real listing — absence now means the note is gone
+                for sn in data:
+                    if not isinstance(sn, dict):
+                        continue
+                    nid = sn.get("id")
+                    if nid is not None:
+                        ids.add(str(nid))
                     txt = sn.get("text")
                     if txt is not None and txt not in by_text:
-                        by_text[txt] = sn.get("id")
-            except Exception:  # noqa: BLE001 - best-effort; fall back to create
-                by_text = {}
-            index[key] = by_text
-        note_id = index[key].get(n.text)
-        if note_id:
-            state[_ref_str(n)] = {"id": note_id, "hash": _hash(n)}
-            adopted += 1
-    return adopted
+                        by_text[txt] = str(nid) if nid is not None else None
+        except Exception:  # noqa: BLE001 - best-effort; inconclusive → don't heal
+            ok = False
+        index[key] = by_text
+        live_ids[key] = ids
+        loaded_ok[key] = ok
+
+    reconciled = 0
+    for n in notes:
+        key_str = _ref_str(n)
+        prev = state.get(key_str)
+        scope_key = (n.scope, n.scope_id)
+        if prev and prev.get("id"):
+            _load(*scope_key)
+            # Only heal when the listing succeeded; a failed/garbled fetch is
+            # inconclusive and must not drop a note that may still exist.
+            if not loaded_ok.get(scope_key) or str(prev["id"]) in live_ids.get(scope_key, set()):
+                continue
+            adopted_id = index.get(scope_key, {}).get(n.text)  # re-adopt by text…
+            if adopted_id:
+                state[key_str] = {"id": adopted_id, "hash": _hash(n)}
+            else:
+                state.pop(key_str, None)                        # …else re-create
+            reconciled += 1
+        elif not prev:
+            _load(*scope_key)
+            note_id = index.get(scope_key, {}).get(n.text)
+            if note_id:
+                state[key_str] = {"id": note_id, "hash": _hash(n)}
+                reconciled += 1
+    return reconciled
 
 
 def _state_path(root: Path) -> Path:

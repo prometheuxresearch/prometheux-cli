@@ -95,6 +95,40 @@ def test_upsert_lifecycle(tmp_path: Path, monkeypatch):
     assert len(state) == 1
 
 
+def test_reconcile_recreates_when_state_id_is_dead(tmp_path: Path, monkeypatch):
+    # Simulates pull → delete ontology on the platform → re-apply. The seeded
+    # state names note ids that died with the ontology; a successful (empty)
+    # server listing must heal the state so the notes are RE-CREATED, not skipped.
+    fake = _FakePx()
+    monkeypatch.setattr(cli_module.context_cmd, "connected_sdk", lambda **k: (fake, "u", "t"))
+
+    import prometheux_chain.client.jarvispy_client as jc
+
+    def _req(method, path, *a, **k):
+        # The reconcile lists notes for the (now empty) recreated ontology.
+        if method == "GET" and path.endswith("/knowledge/context"):
+            return {"data": []}
+        return {"data": {"id": "x"}}
+
+    monkeypatch.setattr(jc.JarvisPyClient, "_request", staticmethod(_req))
+
+    _ws(tmp_path, {"a.md": "# A\nalpha\n"}, "---\nscope: project\nkind: fact\nnotes:\n  - a.md\n---\n")
+    # Seed state as `px pull` would, with an id that no longer exists server-side.
+    (tmp_path / ".px").mkdir(exist_ok=True)
+    from prometheux_cli.context import note_content_hash
+    dead_hash = note_content_hash("project", "pid1", "fact", "retrieved", "# A\nalpha\n")
+    (tmp_path / ".px" / "context-state.json").write_text(json.dumps({
+        "ontologies/p/context/set.context.md::a.md": {"id": "dead-note-99", "hash": dead_hash}
+    }))
+
+    r = CliRunner().invoke(cli, ["context", "apply", str(tmp_path), "--yes"])
+    assert r.exit_code == 0, r.output
+    assert len(fake.created) == 1, r.output      # re-created, not skipped
+    assert fake.updated == []                      # never PATCHed the dead id
+    state = json.loads((tmp_path / ".px" / "context-state.json").read_text())
+    assert state["ontologies/p/context/set.context.md::a.md"]["id"] == "note-1"
+
+
 def test_prune_withheld_without_flag(tmp_path: Path, monkeypatch):
     fake = _wire(monkeypatch)
     runner = CliRunner()

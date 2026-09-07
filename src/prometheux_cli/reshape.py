@@ -24,6 +24,11 @@ import json
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+# The ontology-registry table in an export. The server renamed it
+# `projects_workspace_id` → `ontologies_workspace_id` (project → ontology rename);
+# `px` ships independently of the server, so accept either spelling.
+_ONTOLOGY_TABLE_PREFIXES = ("ontologies_", "projects_")
+
 # concept_type -> body file extension for the Vadalog-family kinds.
 _EXT_BY_TYPE = {
     "logic": ".vadalog",
@@ -81,8 +86,8 @@ class ReshapeResult:
         self.warnings.append(message)
 
 
-def _table(export: dict, prefix: str) -> Optional[dict]:
-    """Return the first table whose name starts with ``prefix``."""
+def _table(export: dict, prefix) -> Optional[dict]:
+    """Return the first table whose name starts with ``prefix`` (str or tuple)."""
     for name, tbl in (export.get("tables") or {}).items():
         if name.startswith(prefix):
             return tbl
@@ -142,13 +147,15 @@ def reshape_ontology(export: dict, ontology_name: str, slug: str, sources: dict 
 
     sources = sources or {}
 
-    # `project_id` / `projects_` are the server export's wire names — unchanged.
-    ontology_id = export.get("project_id", "")
+    # The top-level id key was renamed `project_id` → `ontology_id`; accept either
+    # so a pulled manifest gets a real id (an empty id makes `px apply` treat the
+    # ontology as brand-new and create a duplicate).
+    ontology_id = export.get("ontology_id") or export.get("project_id") or ""
     result = ReshapeResult(ontology_id=ontology_id, ontology_name=ontology_name)
     base = f"ontologies/{slug}"
 
     # --- ontology manifest ------------------------------------------------
-    onto_rows_meta = _rows(_table(export, "projects_"))
+    onto_rows_meta = _rows(_table(export, _ONTOLOGY_TABLE_PREFIXES))
     name = ontology_name
     if onto_rows_meta:
         name = onto_rows_meta[0].get("name") or ontology_name

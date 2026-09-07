@@ -15,6 +15,35 @@ def test_reshape_produces_expected_tree(export_dict):
     assert "ontologies/al-dente/ontology/schema.yaml" in paths
 
 
+def test_reshape_captures_ontology_id_and_name(export_dict):
+    # The manifest MUST carry the server ontology id + name. An empty id makes
+    # `px apply` treat the pulled ontology as brand-new and create a duplicate.
+    result = reshape_ontology(export_dict, ontology_name="fallback", slug="s")
+    manifest = yaml.safe_load(
+        {f.path: f.content for f in result.files}["ontologies/s/prometheux.yaml"]
+    )
+    assert manifest["ontology"]["id"] == "abc123"
+    assert manifest["ontology"]["name"] == "Al Dente Supply Chain"
+
+
+def test_reshape_captures_id_from_pre_rename_export():
+    # A pinned CLI meeting a pre-rename server: legacy `project_id` /
+    # `projects_workspace_id` must still yield a real id + name.
+    legacy = {
+        "project_id": "leg1",
+        "tables": {
+            "projects_workspace_id": {"data": [{"project_id": "leg1", "name": "Legacy"}]},
+            "concepts_leg1": {"data": []},
+        },
+    }
+    result = reshape_ontology(legacy, ontology_name="fallback", slug="s")
+    manifest = yaml.safe_load(
+        {f.path: f.content for f in result.files}["ontologies/s/prometheux.yaml"]
+    )
+    assert manifest["ontology"]["id"] == "leg1"
+    assert manifest["ontology"]["name"] == "Legacy"
+
+
 def test_reshape_body_is_faithful(export_dict):
     result = reshape_ontology(export_dict, "n", "s")
     body = {f.path: f.content for f in result.files}["ontologies/s/concepts/customer.vadalog"]

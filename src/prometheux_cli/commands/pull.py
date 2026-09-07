@@ -62,13 +62,21 @@ def pull(ontology: str, out: Path, slug: str, with_files: bool) -> None:
     _ensure_workspace(dest, slug)
     _ensure_schemas(dest)
 
+    # Pull this ontology's project-scoped context notes into its own directory,
+    # seeding the context-state so a following `px context apply` is a no-op.
+    from .context import write_pulled_context_group
+    note_count = write_pulled_context_group(
+        px, scope="project", scope_id=ontology, root=dest,
+        out_dir=dest / "ontologies" / slug / "context")
+
     for w in result.warnings:
         click.echo(f"{click.style('warning', fg='yellow')}  {w}")
     app_note = f" + {app_count} app(s)" if app_count else ""
     dl_note = f" + {file_count} datasource file(s)" if file_count else ""
+    ctx_note = f" + {note_count} context note(s)" if note_count else ""
     click.echo(
         click.style("Pulled", fg="green", bold=True)
-        + f" '{name}' ({ontology}) to {dest / 'ontologies' / slug} — {len(result.files)} file(s){app_note}{dl_note}."
+        + f" '{name}' ({ontology}) to {dest / 'ontologies' / slug} — {len(result.files)} file(s){app_note}{dl_note}{ctx_note}."
     )
     click.echo("Next: `px validate`")
 
@@ -167,8 +175,11 @@ def _list_ontologies(px, url: str) -> None:
 
 
 def _ontology_name(export: dict, fallback: str) -> str:
+    # Registry table renamed `projects_` → `ontologies_` (project → ontology
+    # rename). Accept either so the pulled ontology keeps its real name — a wrong
+    # name makes `px apply` fail to match the account's ontology and duplicate it.
     for tname, tbl in (export.get("tables") or {}).items():
-        if tname.startswith("projects_"):  # server export wire prefix — unchanged
+        if tname.startswith(("ontologies_", "projects_")):
             rows = tbl.get("data") or []
             if rows and rows[0].get("name"):
                 return rows[0]["name"]
