@@ -34,6 +34,8 @@ def test_build_pulled_context_seeds_matching_hash():
     assert "customer-risk.md" in names
     # State keyed by (manifest_rel, filename), carrying the server note id.
     assert built.state_entries["ontologies/p/context/pulled.context.md::customer-risk.md"]["id"] == "n1"
+    # Keys must be posix so the committed state matches on every OS (Windows too).
+    assert all("\\" not in k for k in built.state_entries)
 
 
 def test_pulled_context_round_trips_as_unchanged(tmp_path: Path):

@@ -21,6 +21,9 @@ would break a script.
   (`ontology_id` / `ontologies_*` — the project → ontology rename). Previously it read the
   old `project_id` / `projects_*` names, so a pulled manifest got an empty id and a wrong
   name; re-applying it failed to match the ontology on the account and created a duplicate.
+- Context-state keys (`.px/context-state.json`) are now written with posix path
+  separators, so a workspace's context round-trips across operating systems (a state
+  file seeded on Windows matches when applied on macOS/Linux and vice versa).
 - `px context apply` now heals stale idempotency state: when a note's id in
   `.px/context-state.json` no longer exists on the server (the ontology was deleted
   and recreated, or the note was deleted), the note is re-created instead of being

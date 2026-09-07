@@ -75,7 +75,8 @@ def write_pulled_context_group(px, *, scope: str, scope_id, root: Path, out_dir:
 
     manifest_abs = out_dir / manifest_name
     try:
-        manifest_rel = str(manifest_abs.resolve().relative_to(root.resolve()))
+        # Posix so the seeded state keys match `collect_context` on every OS.
+        manifest_rel = manifest_abs.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         manifest_rel = manifest_name  # out_dir outside root — degrade, still writes files
 

@@ -125,7 +125,10 @@ def collect_context(workspace) -> Tuple[List[ContextNote], List[ContextLink], Li
     warnings: List[str] = []
 
     for manifest in sorted(workspace.root.rglob("*.context.md")):
-        rel = str(manifest.relative_to(workspace.root))
+        # Posix separators keep the note identity (and the `.px/context-state.json`
+        # keys derived from it) stable across OSes — the state file is committed and
+        # shared, so a workspace pulled on Windows must match one applied on macOS.
+        rel = manifest.relative_to(workspace.root).as_posix()
         try:
             fm, _ = split_frontmatter(manifest)
         except ParseError as exc:
