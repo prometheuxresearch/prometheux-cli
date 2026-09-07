@@ -14,6 +14,37 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.3.5] - 2026-09-07
+
+### Fixed
+- `px pull` now captures the ontology id and name from the current export wire format
+  (`ontology_id` / `ontologies_*` — the project → ontology rename). Previously it read the
+  old `project_id` / `projects_*` names, so a pulled manifest got an empty id and a wrong
+  name; re-applying it failed to match the ontology on the account and created a duplicate.
+- Context-state keys (`.px/context-state.json`) are now written with posix path
+  separators, so a workspace's context round-trips across operating systems (a state
+  file seeded on Windows matches when applied on macOS/Linux and vice versa).
+- `px context apply` now heals stale idempotency state: when a note's id in
+  `.px/context-state.json` no longer exists on the server (the ontology was deleted
+  and recreated, or the note was deleted), the note is re-created instead of being
+  skipped or PATCHed against a dead id. Only heals when the server listing succeeds,
+  so a transient fetch error never drops a live note.
+
+### Added
+- `px pull` also pulls the ontology's project-scoped context notes into
+  `ontologies/<slug>/context/`, seeding `.px/context-state.json` so the next
+  `px context apply` reports no changes.
+- `px context pull` pulls global (workspace-scoped) context notes into `./context/`;
+  `--ontology <id>` additionally pulls that ontology's project-scoped notes.
+
+### Changed
+- `px apply` now also applies the **project-scoped context** of the ontologies it
+  applies, so "apply the ontology" means everything ontology-related — concepts,
+  datasources, schema, apps, AND that ontology's context notes/links. The
+  workspace-global context layer is still applied separately with `px context apply`.
+  Pass `--no-context` to skip. Pruning of context on apply follows `--prune` and is
+  bounded to the applied ontologies' own manifests (never global or other ontologies).
+
 ## [0.3.1] - 2026-09-01
 
 ### Fixed

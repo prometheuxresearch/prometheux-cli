@@ -8,7 +8,9 @@ decision A): the same body in two sets is two notes. Pure collection here; the
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
@@ -16,6 +18,19 @@ from typing import Callable, Dict, List, Optional, Tuple
 from .parsing import ParseError, split_frontmatter
 
 RefKey = Tuple[str, str]  # (manifest path, referenced body path)
+
+
+def note_content_hash(scope: str, scope_id: Optional[str], kind: str,
+                      activation: str, text: str) -> str:
+    """Content hash for a context note's `.px/context-state.json` identity.
+
+    The single source of truth for both `px context apply` (which writes the
+    state) and `px pull` (which seeds it): a pulled note whose state is seeded
+    here classifies as ``unchanged`` on the next apply — no re-create, no
+    duplicate. Keep the payload order in lockstep with both callers.
+    """
+    payload = "|".join([scope or "", scope_id or "", kind or "", activation or "", text or ""])
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def build_note_resolver(root: Path) -> Callable[[str], List[str]]:
@@ -110,7 +125,10 @@ def collect_context(workspace) -> Tuple[List[ContextNote], List[ContextLink], Li
     warnings: List[str] = []
 
     for manifest in sorted(workspace.root.rglob("*.context.md")):
-        rel = str(manifest.relative_to(workspace.root))
+        # Posix separators keep the note identity (and the `.px/context-state.json`
+        # keys derived from it) stable across OSes — the state file is committed and
+        # shared, so a workspace pulled on Windows must match one applied on macOS.
+        rel = manifest.relative_to(workspace.root).as_posix()
         try:
             fm, _ = split_frontmatter(manifest)
         except ParseError as exc:
@@ -156,6 +174,88 @@ def collect_context(workspace) -> Tuple[List[ContextNote], List[ContextLink], Li
             links.append(ContextLink(src, dst, relation))
 
     return notes, links, warnings
+
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _note_slug(note: dict, index: int) -> str:
+    """A filename stem for a note body: its title, else its first line, else index."""
+    base = (note.get("title") or "").strip()
+    if not base:
+        for line in (note.get("text") or "").splitlines():
+            candidate = line.strip().lstrip("#").strip()
+            if candidate:
+                base = candidate
+                break
+    slug = _SLUG_RE.sub("-", base.lower()).strip("-")[:50].strip("-")
+    return slug or f"note-{index + 1}"
+
+
+@dataclass
+class PulledContext:
+    manifest_text: str
+    body_files: List[Tuple[str, str]]        # (filename beside the manifest, text)
+    state_entries: Dict[str, dict]           # "<manifest_rel>::<filename>" -> {id, hash}
+    count: int
+
+
+def build_pulled_context(server_notes: List[dict], *, scope: str, scope_id: Optional[str],
+                         manifest_rel: str) -> Optional[PulledContext]:
+    """Turn server context notes into a `.context.md` manifest + body files + state.
+
+    ``scope`` is the CLI frontmatter scope (``project`` | ``global``) — NOT the
+    server's ``ontology`` spelling — and ``scope_id`` is the owning ontology id for
+    project scope (None for global). Both feed :func:`note_content_hash`, so the
+    seeded state matches what ``px context apply`` computes when it re-reads these
+    files, making the first apply after a pull a clean no-op (no duplicates).
+
+    The body of each file is the note's text written verbatim, so even if the
+    seeded state is later lost, ``px context apply``'s server reconcile (which
+    matches on exact text) still adopts the existing note instead of duplicating.
+
+    Returns None when there is nothing to write.
+    """
+    import yaml
+
+    entries: List[dict] = []
+    body_files: List[Tuple[str, str]] = []
+    state: Dict[str, dict] = {}
+    used: set = set()
+
+    for i, note in enumerate(server_notes or []):
+        text = note.get("text")
+        if not text:
+            continue  # nothing authorable
+        kind = note.get("kind") or "fact"
+        activation = note.get("activation") or "retrieved"
+        stem = _note_slug(note, i)
+        fname = f"{stem}.md"
+        n = 2
+        while fname in used:
+            fname = f"{stem}-{n}.md"
+            n += 1
+        used.add(fname)
+
+        entries.append({"path": fname, "activation": activation, "kind": kind})
+        body_files.append((fname, text))
+        note_id = note.get("id")
+        if note_id:
+            key = f"{manifest_rel}::{fname}"
+            state[key] = {"id": str(note_id),
+                          "hash": note_content_hash(scope, scope_id, kind, activation, text)}
+
+    if not entries:
+        return None
+
+    fm = {"scope": scope, "notes": entries}
+    manifest_text = (
+        "---\n"
+        + yaml.safe_dump(fm, sort_keys=False, allow_unicode=True)
+        + "---\n\n"
+        + "<!-- Pulled from the platform. Edit the body files to change note text. -->\n"
+    )
+    return PulledContext(manifest_text, body_files, state, len(entries))
 
 
 def _endpoint(ref, key_by_path, scope_id) -> Optional[Endpoint]:

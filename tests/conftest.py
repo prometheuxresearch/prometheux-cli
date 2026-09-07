@@ -5,15 +5,21 @@ import pytest
 
 @pytest.fixture
 def export_dict():
-    """A minimal but realistic export, shaped like prometheux_chain.export_ontology."""
+    """A minimal but realistic export, shaped like prometheux_chain.export_ontology.
+
+    Uses the CURRENT server wire names (project → ontology rename): the top-level
+    id key is ``ontology_id`` and the registry table is ``ontologies_workspace_id``.
+    A pinned CLI still has to read a pre-rename server, so a couple of tests pin the
+    legacy ``project_id`` / ``projects_workspace_id`` spelling explicitly.
+    """
     pid = "abc123"
     return {
-        "project_id": pid,
+        "ontology_id": pid,
         "tables": {
             "user_migrations": {"schema": [], "data": [{"x": 1}], "row_count": 1},
-            "projects_workspace_id": {
+            "ontologies_workspace_id": {
                 "schema": [],
-                "data": [{"project_id": pid, "name": "Al Dente Supply Chain"}],
+                "data": [{"ontology_id": pid, "name": "Al Dente Supply Chain"}],
                 "row_count": 1,
             },
             "datasources_workspace_id": {

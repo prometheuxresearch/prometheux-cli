@@ -220,6 +220,12 @@ class _FakePx:
         self.apps_saved = []
         self.apps_deleted = []
         self.server_apps = []  # [{id, name, definition}]
+        self.context_created = []  # (scope, scope_id, text)
+
+    def create_context_note(self, scope, kind, text, scope_id=None):
+        nid = f"cn-{len(self.context_created) + 1}"
+        self.context_created.append((scope, scope_id, text))
+        return {"id": nid}
 
     def list_ontologies(self):
         return [{"id": "abc123", "name": "Al Dente Supply Chain"}]
@@ -331,6 +337,60 @@ def test_apply_creates_new_concept(tmp_path: Path, export_dict, monkeypatch):
     saved = {s["output_predicate"]: s for s in fake.saved}
     assert "flag" in saved
     assert "existing_name" not in saved["flag"]  # create
+
+
+def test_apply_also_applies_project_context(tmp_path: Path, export_dict, monkeypatch):
+    # "Apply the ontology" should apply everything ontology-related, including the
+    # ontology's own project-scoped context notes — not just concepts.
+    fake = _FakePx(export_dict)
+    _wire(monkeypatch, fake)
+    # reconcile lists the (empty) server context; edges/non-default notes go direct.
+    import prometheux_chain.client.jarvispy_client as jc
+    monkeypatch.setattr(jc.JarvisPyClient, "_request",
+                        staticmethod(lambda method, path, *a, **k: {"data": []}))
+
+    runner = CliRunner()
+    concepts = _pull(runner, tmp_path)
+    # Add an edited concept so there is at least one ontology change to apply.
+    (concepts / "customer.vadalog").write_text(
+        (concepts / "customer.vadalog").read_text() + "\ncustomer(Id, Name) :- extra(Id, Name).\n"
+    )
+    # Author a project-scoped context note under the ontology.
+    ctx = concepts.parent / "context"
+    ctx.mkdir(exist_ok=True)
+    (ctx / "domain.context.md").write_text(
+        "---\nscope: project\nactivation: retrieved\nkind: fact\nnotes:\n  - note.md\n---\n"
+    )
+    (ctx / "note.md").write_text("# Domain\nCustomers churn in Q4.\n")
+
+    result = runner.invoke(cli, ["apply", str(tmp_path), "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "Applying context" in result.output
+    # The note was created against the applied ontology's id.
+    assert len(fake.context_created) == 1, result.output
+    assert fake.context_created[0][0] == "project"
+    assert fake.context_created[0][1] == "abc123"  # scope_id = the ontology id
+
+
+def test_apply_no_context_flag_skips_context(tmp_path: Path, export_dict, monkeypatch):
+    fake = _FakePx(export_dict)
+    _wire(monkeypatch, fake)
+    runner = CliRunner()
+    concepts = _pull(runner, tmp_path)
+    (concepts / "customer.vadalog").write_text(
+        (concepts / "customer.vadalog").read_text() + "\ncustomer(Id, Name) :- extra(Id, Name).\n"
+    )
+    ctx = concepts.parent / "context"
+    ctx.mkdir(exist_ok=True)
+    (ctx / "domain.context.md").write_text(
+        "---\nscope: project\nnotes:\n  - note.md\n---\n"
+    )
+    (ctx / "note.md").write_text("# Domain\nX.\n")
+
+    result = runner.invoke(cli, ["apply", str(tmp_path), "--yes", "--no-context"])
+    assert result.exit_code == 0, result.output
+    assert fake.context_created == []
+    assert "run `px context apply`" in result.output
 
 
 def test_apply_abort_without_yes(tmp_path: Path, export_dict, monkeypatch):
