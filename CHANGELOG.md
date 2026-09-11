@@ -14,6 +14,13 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.3.6] - 2026-09-11
+
+### Changed
+- Remaining `px` commands that called JarvisPy REST directly (`rest_data` / raw `_request`)
+  now go through `prometheux_chain`. A backend route add/remove/rename can no longer
+  bypass the SDK wrapper.
+
 ## [0.3.5] - 2026-09-07
 
 ### Fixed
