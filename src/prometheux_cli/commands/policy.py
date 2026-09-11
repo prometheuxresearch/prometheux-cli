@@ -12,7 +12,7 @@ import sys
 
 import click
 
-from ..sdk import SdkError, connected_sdk, rest_data
+from ..sdk import SdkError, connected_sdk
 
 
 @click.group()
@@ -157,13 +157,10 @@ def trigger_cmd(ontology_id, policy_id) -> None:
 @click.option("--offset", default=0, help="Skip this many runs.")
 def runs_cmd(ontology_id, policy_id, limit, offset) -> None:
     """Show a policy's execution history."""
-    _connect()
+    px, _, _ = _connect()
     try:
-        data = rest_data(
-            "GET", f"/api/v1/schedules/{ontology_id}/policies/{policy_id}/runs",
-            params={"limit": limit, "offset": offset},
-        ) or {}
-    except SdkError as exc:
+        data = px.get_run_history(ontology_id, policy_id, limit=limit, offset=offset) or {}
+    except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     runs = data.get("runs") if isinstance(data, dict) else data
     runs = runs or []

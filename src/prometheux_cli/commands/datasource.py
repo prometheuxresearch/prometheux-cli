@@ -12,7 +12,7 @@ import sys
 
 import click
 
-from ..sdk import SdkError, connected_sdk, rest_data
+from ..sdk import SdkError, connected_sdk
 
 
 @click.group()
@@ -76,10 +76,8 @@ def delete_cmd(bind_or_id: str, by_id: bool, assume_yes: bool) -> None:
         click.echo("Aborted.")
         sys.exit(1)
     try:
-        data = rest_data("POST", "/api/v1/data/cleanup",
-                         json={"source_ids": [source_id]}) or {}
-    except SdkError as exc:
+        px.cleanup_sources(source_ids=[source_id])
+    except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
-    n = data.get("deleted_count") if isinstance(data, dict) else None
     click.echo(click.style("Disconnected", fg="green", bold=True)
-               + f" datasource {source_id}" + (f" ({n} removed)." if n is not None else "."))
+               + f" datasource {source_id}.")

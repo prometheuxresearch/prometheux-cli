@@ -6,7 +6,7 @@ import sys
 
 import click
 
-from ..sdk import SdkError, connected_sdk, rest_data
+from ..sdk import SdkError, connected_sdk
 
 
 @click.group()
@@ -16,7 +16,7 @@ def search() -> None:
 
 def _connect():
     try:
-        connected_sdk(require_token=True)
+        return connected_sdk(require_token=True)
     except SdkError as exc:
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
@@ -28,13 +28,13 @@ def _connect():
 @click.option("--exclude", "exclude_ontology_id", default="", help="Ontology id to exclude from results.")
 def concepts_cmd(query_text: str, top_k: int, exclude_ontology_id: str) -> None:
     """Find existing concepts across ontologies similar to QUERY_TEXT (to reuse)."""
-    _connect()
+    px, _, _ = _connect()
     try:
-        data = rest_data("GET", "/api/v1/concepts/search-similar", params={
-            "query": query_text, "top_k": top_k,
-            "exclude_project_id": exclude_ontology_id,  # wire alias for exclude_ontology_id
-        }) or {}
-    except SdkError as exc:
+        data = px.search_similar_concepts(
+            query_text, top_k=top_k,
+            exclude_ontology_id=exclude_ontology_id or None,
+        ) or {}
+    except Exception as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
     matches = (data.get("matches") if isinstance(data, dict) else data) or []
@@ -53,10 +53,10 @@ def concepts_cmd(query_text: str, top_k: int, exclude_ontology_id: str) -> None:
 @click.argument("query_text")
 def company_cmd(query_text: str) -> None:
     """Search the Prometheux company knowledge base."""
-    _connect()
+    px, _, _ = _connect()
     try:
-        data = rest_data("GET", "/api/v1/assistant/company-info", params={"query": query_text}) or {}
-    except SdkError as exc:
+        data = px.get_company_info(query_text) or {}
+    except Exception as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
     content = data.get("content") if isinstance(data, dict) else data

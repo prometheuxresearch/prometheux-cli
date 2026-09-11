@@ -171,7 +171,7 @@ def apply_context_layer(px, root: Path, workspace, *, note_filter=None,
         click.echo("No context notes found (no *.context.md manifests).")
         return True
 
-    adopted = _reconcile_with_server(notes, state)
+    adopted = _reconcile_with_server(px, notes, state)
     if adopted:
         click.echo(f"  reconciled {adopted} note(s) with the server (adopted matches / healed stale ids)")
 
@@ -302,7 +302,7 @@ def _classify(note, state) -> str:
     return "unchanged" if prev.get("hash") == _hash(note) else "update"
 
 
-def _reconcile_with_server(notes, state) -> int:
+def _reconcile_with_server(px, notes, state) -> int:
     """Reconcile local state with the server's notes before classifying.
 
     The idempotency state (`.px/context-state.json`) drifts from the server two
@@ -324,10 +324,6 @@ def _reconcile_with_server(notes, state) -> int:
     """
     if not notes:
         return 0
-    try:
-        from prometheux_chain.client.jarvispy_client import JarvisPyClient
-    except Exception:  # noqa: BLE001 - SDK missing → skip reconcile
-        return 0
 
     index: dict = {}      # (scope, scope_id) -> {text: note_id}
     live_ids: dict = {}   # (scope, scope_id) -> {note_id, …}
@@ -341,8 +337,11 @@ def _reconcile_with_server(notes, state) -> int:
         ids: set = set()
         ok = False
         try:
-            resp = JarvisPyClient.list_context_notes(scope, scope_id)
-            data = (resp or {}).get("data")
+            # Manifests use `project`; the server/SDK speak `ontology`.
+            server_scope = "ontology" if scope == "project" else scope
+            data = px.list_context_notes(server_scope, scope_id)
+            if isinstance(data, dict):
+                data = data.get("data")
             if isinstance(data, list):
                 ok = True  # a real listing — absence now means the note is gone
                 for sn in data:
@@ -420,34 +419,23 @@ def _endpoint_ref(endpoint, note_ids):
 
 
 def _create_note(px, note):
-    """Create one note. Uses the SDK for the default activation; the REST client
-    for `always`/`on_demand`, which the SDK does not yet expose."""
-    if note.activation == "retrieved":
-        res = px.create_context_note(scope=note.scope, kind=note.kind, text=note.text, scope_id=note.scope_id)
-        return (res or {}).get("id")
-    from prometheux_chain.client.jarvispy_client import JarvisPyClient
-    resp = JarvisPyClient._request("POST", "/api/v1/knowledge/context", json={
-        "scope": note.scope, "scope_id": note.scope_id, "kind": note.kind,
-        "text": note.text, "activation": note.activation, "title": note.title, "source": "import",
-    })
-    return ((resp or {}).get("data") or {}).get("id")
+    """Create one note, including non-default ``activation`` / ``title``."""
+    res = px.create_context_note(
+        scope=note.scope, kind=note.kind, text=note.text, scope_id=note.scope_id,
+        source="import", activation=note.activation, title=note.title,
+    )
+    return (res or {}).get("id")
 
 
 def _update_note(px, note_id, note):
-    """Update an existing note's body/kind (and activation when non-default)."""
-    if note.activation == "retrieved":
-        px.update_context_note(note_id, text=note.text, kind=note.kind)
-        return
-    from prometheux_chain.client.jarvispy_client import JarvisPyClient
-    JarvisPyClient._request("PATCH", f"/api/v1/knowledge/context/{note_id}", json={
-        "text": note.text, "kind": note.kind, "activation": note.activation,
-    })
+    """Update an existing note's body/kind/activation."""
+    px.update_context_note(
+        note_id, text=note.text, kind=note.kind, activation=note.activation,
+    )
 
 
 def _create_edge(px, src, dst, relation):
     """src/dst are (type, id) tuples where type is 'note' or 'concept'."""
-    from prometheux_chain.client.jarvispy_client import JarvisPyClient
-    JarvisPyClient._request("POST", "/api/v1/knowledge/context/edges", json={
-        "src_type": src[0], "src_id": src[1], "dst_type": dst[0], "dst_id": dst[1],
-        "relation": relation, "created_by": "user",
-    })
+    px.create_context_edge(
+        src[0], src[1], dst[0], dst[1], relation=relation, created_by="user",
+    )

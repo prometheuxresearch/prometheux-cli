@@ -7,7 +7,7 @@ import sys
 
 import click
 
-from ..sdk import SdkError, connected_sdk, rest_data
+from ..sdk import SdkError, connected_sdk
 
 
 @click.command()
@@ -21,12 +21,9 @@ def query(ontology_id: str, concept_name: str, sql: str, as_json: bool) -> None:
     Example: px query 1db22ad122a tx "SELECT country, count(*) FROM tx GROUP BY country"
     """
     try:
-        connected_sdk(require_token=True)
-        data = rest_data(
-            "POST", f"/api/v1/concepts/{ontology_id}/query",
-            json={"concept_name": concept_name, "sql": sql},
-        ) or {}
-    except SdkError as exc:
+        px, _, _ = connected_sdk(require_token=True)
+        data = px.query_concept(ontology_id, concept_name, sql) or {}
+    except (SdkError, Exception) as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
 

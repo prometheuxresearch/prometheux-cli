@@ -222,7 +222,7 @@ class _FakePx:
         self.server_apps = []  # [{id, name, definition}]
         self.context_created = []  # (scope, scope_id, text)
 
-    def create_context_note(self, scope, kind, text, scope_id=None):
+    def create_context_note(self, scope, kind, text, scope_id=None, **kwargs):
         nid = f"cn-{len(self.context_created) + 1}"
         self.context_created.append((scope, scope_id, text))
         return {"id": nid}
@@ -344,10 +344,6 @@ def test_apply_also_applies_project_context(tmp_path: Path, export_dict, monkeyp
     # ontology's own project-scoped context notes — not just concepts.
     fake = _FakePx(export_dict)
     _wire(monkeypatch, fake)
-    # reconcile lists the (empty) server context; edges/non-default notes go direct.
-    import prometheux_chain.client.jarvispy_client as jc
-    monkeypatch.setattr(jc.JarvisPyClient, "_request",
-                        staticmethod(lambda method, path, *a, **k: {"data": []}))
 
     runner = CliRunner()
     concepts = _pull(runner, tmp_path)
@@ -775,19 +771,6 @@ def test_apply_unknown_project_fails(tmp_path: Path, monkeypatch):
     assert fake.saved == []
 
 
-def _capture_requests(monkeypatch):
-    """Patch JarvisPyClient._request to record (method, path, json) and succeed."""
-    calls = []
-
-    def fake_request(method, path, json=None, params=None):
-        calls.append((method, path, json))
-        return {"status": "success", "data": {"id": (json or {}).get("concept_name")}}
-
-    from prometheux_chain.client.jarvispy_client import JarvisPyClient
-    monkeypatch.setattr(JarvisPyClient, "_request", staticmethod(fake_request))
-    return calls
-
-
 def _generative_workspace(tmp_path: Path):
     proj = tmp_path / "ontologies" / "t"
     (proj / "concepts").mkdir(parents=True)
@@ -804,7 +787,6 @@ def _generative_workspace(tmp_path: Path):
 def test_apply_wires_llm_and_dynamic_context(tmp_path: Path, monkeypatch):
     fake = _FakePx(_empty_export())
     monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
-    calls = _capture_requests(monkeypatch)
     proj = _generative_workspace(tmp_path)
 
     (proj / "concepts" / "summary.llm.md").write_text(
@@ -820,14 +802,12 @@ def test_apply_wires_llm_and_dynamic_context(tmp_path: Path, monkeypatch):
     result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
     assert result.exit_code == 0, result.output
 
-    saves = {c[2]["concept_name"]: c[2] for c in calls if c[1].endswith("/save")}
+    saves = {s["concept_name"]: s for s in fake.saved}
     assert saves["summary"]["concept_type"] == "llm"
     assert saves["summary"]["concept_config"]["provider"] == "anthropic"
     assert "Summarize" in saves["summary"]["definition"]
     assert saves["policy"]["concept_type"] == "context"
     assert saves["policy"]["concept_config"] == {"mode": "dynamic", "query": "credit-risk scoring policy"}
-    # generative concepts never go through the SDK save_concept path
-    assert fake.saved == []
 
 
 def test_apply_static_context_resolves_notes_from_state(tmp_path: Path, monkeypatch):
@@ -835,7 +815,6 @@ def test_apply_static_context_resolves_notes_from_state(tmp_path: Path, monkeypa
 
     fake = _FakePx(_empty_export())
     monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
-    calls = _capture_requests(monkeypatch)
     proj = _generative_workspace(tmp_path)
 
     (tmp_path / ".px").mkdir()
@@ -850,14 +829,13 @@ def test_apply_static_context_resolves_notes_from_state(tmp_path: Path, monkeypa
 
     result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
     assert result.exit_code == 0, result.output
-    saves = {c[2]["concept_name"]: c[2] for c in calls if c[1].endswith("/save")}
+    saves = {s["concept_name"]: s for s in fake.saved}
     assert saves["pinned"]["concept_config"] == {"mode": "static", "note_ids": ["note-a", "note-b"]}
 
 
 def test_apply_static_context_warns_on_unresolved_note(tmp_path: Path, monkeypatch):
     fake = _FakePx(_empty_export())
     monkeypatch.setattr(cli_module.apply_cmd, "connected_sdk", lambda **k: (fake, "http://x", "t"))
-    calls = _capture_requests(monkeypatch)
     proj = _generative_workspace(tmp_path)
 
     # no context-state -> the referenced note cannot resolve
@@ -869,7 +847,7 @@ def test_apply_static_context_warns_on_unresolved_note(tmp_path: Path, monkeypat
     result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
     assert result.exit_code == 0, result.output
     assert "not found in context-state" in result.output
-    saves = {c[2]["concept_name"]: c[2] for c in calls if c[1].endswith("/save")}
+    saves = {s["concept_name"]: s for s in fake.saved}
     assert saves["pinned"]["concept_config"] == {"mode": "static", "note_ids": []}
 
 

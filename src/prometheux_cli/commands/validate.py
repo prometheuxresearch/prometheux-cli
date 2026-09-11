@@ -63,10 +63,10 @@ def validate(path: Path, strict: bool, online: bool) -> None:
 def _validate_online(root: Path) -> int:
     """Server-validate each concept body via the Vadalog engine. Returns error count."""
     from ..loader import load_workspace
-    from ..sdk import SdkError, connected_sdk, rest_data
+    from ..sdk import SdkError, connected_sdk
 
     try:
-        connected_sdk(require_token=True)
+        px, _, _ = connected_sdk(require_token=True)
     except SdkError as exc:
         click.echo(click.style("FAIL", fg="red", bold=True) + f": --online needs login: {exc}", err=True)
         return 1
@@ -81,13 +81,13 @@ def _validate_online(root: Path) -> int:
                 continue  # engine validation applies to logic/sql/cypher/python bodies
             checked += 1
             try:
-                res = rest_data("POST", "/api/v1/vadalog/validate", json={
-                    "definition": c.body,
-                    "concept_type": c.concept_type,
-                    "concept_name": c.predicate,
-                    "project_id": onto.id,
-                }) or {}
-            except SdkError as exc:
+                res = px.validate_concept(
+                    definition=c.body,
+                    concept_type=c.concept_type,
+                    concept_name=c.predicate,
+                    ontology_id=onto.id,
+                ) or {}
+            except Exception as exc:  # noqa: BLE001
                 click.echo(f"  {click.style('error', fg='red')}  {onto.slug}/{c.predicate}: {exc}")
                 errors += 1
                 continue

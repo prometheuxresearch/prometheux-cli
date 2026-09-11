@@ -11,7 +11,7 @@ import sys
 
 import click
 
-from ..sdk import SdkError, connected_sdk, rest_data
+from ..sdk import SdkError, connected_sdk
 
 
 @click.group()
@@ -36,10 +36,10 @@ def _fail(msg: str) -> None:
 @click.argument("app_id")
 def publish_cmd(ontology_id: str, app_id: str) -> None:
     """Publish a frozen, shareable snapshot of APP_ID's current draft."""
-    _connect()
+    px, _, _ = _connect()
     try:
-        rest_data("POST", f"/api/v1/apps/{ontology_id}/{app_id}/publish")
-    except SdkError as exc:
+        px.publish_app(ontology_id, app_id)
+    except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     click.echo(click.style("Published", fg="green", bold=True) + f" app {app_id}.")
 
@@ -49,9 +49,9 @@ def publish_cmd(ontology_id: str, app_id: str) -> None:
 @click.argument("app_id")
 def unpublish_cmd(ontology_id: str, app_id: str) -> None:
     """Remove APP_ID's published snapshot (back to draft-only)."""
-    _connect()
+    px, _, _ = _connect()
     try:
-        rest_data("POST", f"/api/v1/apps/{ontology_id}/{app_id}/unpublish")
-    except SdkError as exc:
+        px.unpublish_app(ontology_id, app_id)
+    except Exception as exc:  # noqa: BLE001
         _fail(str(exc))
     click.echo(click.style("Unpublished", fg="green", bold=True) + f" app {app_id}.")

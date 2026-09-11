@@ -2,6 +2,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
+from prometheux_cli import sdk as cli_sdk
 from prometheux_cli.cli import cli
 
 
@@ -58,3 +59,36 @@ def test_no_workspace_found(tmp_path: Path):
     runner = CliRunner()
     result = runner.invoke(cli, ["validate", str(tmp_path)])
     assert result.exit_code == 2
+
+
+class _FakePx:
+    def __init__(self, valid=True):
+        self.calls = []
+        self.valid = valid
+
+    def validate_concept(self, definition=None, concept_type=None, concept_name=None,
+                         ontology_id=None):
+        self.calls.append((concept_name, concept_type, ontology_id))
+        return {"valid": self.valid, "error": None if self.valid else "bad rules"}
+
+
+def test_validate_online_calls_sdk(tmp_path: Path, monkeypatch):
+    # `--online` is a local import of connected_sdk, so patch the sdk module.
+    fake = _FakePx()
+    monkeypatch.setattr(cli_sdk, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+    root = _init(tmp_path)
+    result = CliRunner().invoke(cli, ["validate", str(root), "--online"])
+    assert result.exit_code == 0, result.output
+    names = {c[0] for c in fake.calls}
+    assert names == {"customer", "risk"}
+    assert "Online concept validation" in result.output
+
+
+def test_validate_online_reports_invalid(tmp_path: Path, monkeypatch):
+    fake = _FakePx(valid=False)
+    monkeypatch.setattr(cli_sdk, "connected_sdk", lambda **k: (fake, "http://x", "t"))
+    root = _init(tmp_path)
+    result = CliRunner().invoke(cli, ["validate", str(root), "--online"])
+    assert result.exit_code == 1, result.output
+    assert "bad rules" in result.output
+    assert "FAIL" in result.output

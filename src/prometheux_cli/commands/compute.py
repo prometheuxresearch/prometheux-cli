@@ -11,7 +11,7 @@ from typing import List, Optional
 
 import click
 
-from ..sdk import SdkError, connected_sdk, rest_data
+from ..sdk import SdkError, connected_sdk
 
 
 def _enabled_machines(px) -> List[dict]:
@@ -111,15 +111,13 @@ def catalog_cmd() -> None:
 def provision_cmd(machine_id: str, machine_name: str) -> None:
     """Add catalog machine MACHINE_ID to your machine list (not billable yet)."""
     try:
-        connected_sdk(require_token=True)
-        body = {"machine_id": machine_id}
-        if machine_name:
-            body["machine_name"] = machine_name
-        data = rest_data("POST", "/api/v1/machines/user-machines/use", json=body) or {}
+        px, _, _ = connected_sdk(require_token=True)
+        resp = px.use_machine(machine_id, machine_name=machine_name) or {}
     except (SdkError, Exception) as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
-    um = (data.get("user_machine") if isinstance(data, dict) else None) or {}
+    data = resp.get("data") if isinstance(resp, dict) and "data" in resp else resp
+    um = ((data or {}).get("user_machine") if isinstance(data, dict) else None) or {}
     click.echo(click.style("Provisioned", fg="green", bold=True)
                + f" machine {um.get('id') or machine_id}. Power on with `px compute start`.")
 
@@ -133,8 +131,8 @@ def remove_cmd(user_machine_id: str, assume_yes: bool) -> None:
         click.echo("Aborted.")
         sys.exit(1)
     try:
-        connected_sdk(require_token=True)
-        rest_data("DELETE", f"/api/v1/machines/user-machines/{user_machine_id}")
+        px, _, _ = connected_sdk(require_token=True)
+        px.delete_user_machine(user_machine_id)
     except (SdkError, Exception) as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
