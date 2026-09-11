@@ -12,15 +12,16 @@ class _FakePx:
         self.created = []
         self.updated = []
         self.deleted = []
+        self.edges = []
         self._n = 0
 
-    def create_context_note(self, scope, kind, text, scope_id=None):
+    def create_context_note(self, scope, kind, text, scope_id=None, **kwargs):
         self._n += 1
         nid = f"note-{self._n}"
         self.created.append((nid, text))
         return {"id": nid}
 
-    def update_context_note(self, note_id, text=None, kind=None):
+    def update_context_note(self, note_id, text=None, kind=None, **kwargs):
         self.updated.append((note_id, text))
         return {"id": note_id}
 
@@ -28,13 +29,15 @@ class _FakePx:
         self.deleted.append(note_id)
         return {}
 
+    def create_context_edge(self, src_type, src_id, dst_type, dst_id,
+                            relation="relates_to", created_by="user"):
+        self.edges.append((src_type, src_id, dst_type, dst_id, relation))
+        return {"id": "edge-1"}
+
 
 def _wire(monkeypatch):
     fake = _FakePx()
     monkeypatch.setattr(cli_module.context_cmd, "connected_sdk", lambda **k: (fake, "u", "t"))
-    # edges (and non-retrieved notes) go through the SDK client directly; stub it.
-    import prometheux_chain.client.jarvispy_client as jc
-    monkeypatch.setattr(jc.JarvisPyClient, "_request", staticmethod(lambda *a, **k: {"data": {"id": "x"}}))
     return fake
 
 
@@ -100,17 +103,8 @@ def test_reconcile_recreates_when_state_id_is_dead(tmp_path: Path, monkeypatch):
     # state names note ids that died with the ontology; a successful (empty)
     # server listing must heal the state so the notes are RE-CREATED, not skipped.
     fake = _FakePx()
+    fake.list_context_notes = lambda *a, **k: []
     monkeypatch.setattr(cli_module.context_cmd, "connected_sdk", lambda **k: (fake, "u", "t"))
-
-    import prometheux_chain.client.jarvispy_client as jc
-
-    def _req(method, path, *a, **k):
-        # The reconcile lists notes for the (now empty) recreated ontology.
-        if method == "GET" and path.endswith("/knowledge/context"):
-            return {"data": []}
-        return {"data": {"id": "x"}}
-
-    monkeypatch.setattr(jc.JarvisPyClient, "_request", staticmethod(_req))
 
     _ws(tmp_path, {"a.md": "# A\nalpha\n"}, "---\nscope: project\nkind: fact\nnotes:\n  - a.md\n---\n")
     # Seed state as `px pull` would, with an id that no longer exists server-side.
@@ -142,3 +136,16 @@ def test_prune_withheld_without_flag(tmp_path: Path, monkeypatch):
     assert r.exit_code == 0, r.output
     assert fake.deleted == []
     assert "use --prune" in r.output
+
+
+def test_apply_creates_note_edges(tmp_path: Path, monkeypatch):
+    fake = _wire(monkeypatch)
+    manifest = (
+        "---\nscope: project\nkind: fact\nnotes:\n  - a.md\n  - b.md\n"
+        "links:\n  - from: a.md\n    to: b.md\n    relation: relates_to\n---\n"
+    )
+    _ws(tmp_path, {"a.md": "# A\nalpha\n", "b.md": "# B\nbeta\n"}, manifest)
+    r = CliRunner().invoke(cli, ["context", "apply", str(tmp_path), "--yes"])
+    assert r.exit_code == 0, r.output
+    assert len(fake.created) == 2
+    assert fake.edges == [("note", "note-1", "note", "note-2", "relates_to")]

@@ -243,7 +243,7 @@ def _apply_ontology(px, ontology: LocalOntology, result: PlanResult, *, prune: b
                                          datasource_binds=ds_binds, ontology_id=ontology.id)
             try:
                 if is_generative(concept):
-                    _save_generative_concept(ontology, concept, kwargs, resolve_notes)
+                    _save_generative_concept(px, ontology, concept, kwargs, resolve_notes)
                 else:
                     px.save_concept(ontology_id=ontology.id, **kwargs)
                 verb = "updated" if concept.predicate in updates else "created"
@@ -401,16 +401,12 @@ def _persist_app_id(app_file: Path, app_id: str) -> None:
     app_file.write_text(yaml.safe_dump(reordered, sort_keys=False, allow_unicode=True), "utf-8")
 
 
-def _save_generative_concept(ontology: LocalOntology, concept, kwargs: dict, resolve_notes) -> None:
+def _save_generative_concept(px, ontology: LocalOntology, concept, kwargs: dict, resolve_notes) -> None:
     """Save a context or llm concept with its ``concept_config``.
 
-    The SDK's ``save_concept`` does not forward ``concept_config``, so this posts
-    to the same ``/save`` endpoint directly (the established SDK-gap workaround).
     A static context concept's ``notes:`` paths are resolved to server note ids
     via the context-state; unresolved or ambiguous paths are warned, never guessed.
     """
-    from prometheux_chain.client.jarvispy_client import JarvisPyClient
-
     note_ids: List[str] = []
     meta = concept.meta or {}
     if (
@@ -436,23 +432,10 @@ def _save_generative_concept(ontology: LocalOntology, concept, kwargs: dict, res
                 )
 
     config = generative_concept_config(concept, note_ids=note_ids)
-
-    payload = {
-        "definition": kwargs.get("definition") or "",
-        "concept_type": kwargs["concept_type"],
-        "concept_name": kwargs.get("concept_name") or concept.predicate,
-        "output_predicate": kwargs.get("output_predicate", ""),
-    }
-    for key in ("group", "description", "binds"):
-        if kwargs.get(key):
-            payload[key] = kwargs[key]
-    if kwargs.get("existing_name"):
-        payload["existing_name"] = kwargs["existing_name"]
-        payload["force_overwrite"] = True
+    save_kwargs = dict(kwargs)
     if config is not None:
-        payload["concept_config"] = config
-
-    JarvisPyClient._request("POST", f"/api/v1/concepts/{ontology.id}/save", json=payload)
+        save_kwargs["concept_config"] = config
+    px.save_concept(ontology_id=ontology.id, **save_kwargs)
 
 
 def _apply_datasources(px, ontology: LocalOntology, result: PlanResult):

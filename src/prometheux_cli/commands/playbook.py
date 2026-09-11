@@ -10,7 +10,7 @@ import sys
 
 import click
 
-from ..sdk import SdkError, connected_sdk, rest_data
+from ..sdk import SdkError, connected_sdk
 
 
 @click.group()
@@ -29,10 +29,10 @@ def _connect():
 @playbook.command("list")
 def list_cmd() -> None:
     """List available playbooks. The ID is what `px playbook show` takes."""
-    _connect()
+    px, _, _ = _connect()
     try:
-        data = rest_data("GET", "/api/v1/assistant/skills") or {}
-    except SdkError as exc:
+        data = px.list_skills() or {}
+    except Exception as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
     skills = (data.get("skills") if isinstance(data, dict) else data) or []
@@ -49,10 +49,10 @@ def list_cmd() -> None:
 @click.argument("skill_id")
 def show_cmd(skill_id: str) -> None:
     """Print the full body of playbook SKILL_ID."""
-    _connect()
+    px, _, _ = _connect()
     try:
-        data = rest_data("GET", f"/api/v1/assistant/skills/{skill_id}") or {}
-    except SdkError as exc:
+        data = px.get_skill(skill_id) or {}
+    except Exception as exc:  # noqa: BLE001
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(1)
     if isinstance(data, dict):
