@@ -18,10 +18,12 @@ dependencies = [
     "click>=8.1",
     "PyYAML>=6.0",
     "jsonschema>=4.18",
-    # 0.3.2 is the floor because earlier releases call the retired
-    # /ontologies/export-project and /import-project aliases, which the backend
-    # no longer serves — pull/plan/apply would 404 against a current pod.
-    "prometheux_chain>=0.4.0",
+    # 0.4.2 is the floor because run_concept gained the run_mode parameter
+    # there; older releases only accept the retired force_rerun boolean, which
+    # the backend now ignores on the JSON run path. (Earlier releases also
+    # called the retired /ontologies/export-project and /import-project aliases
+    # the backend no longer serves — pull/plan/apply would 404 against a current pod.)
+    "prometheux_chain>=0.4.2",
 ]
 
 [project.optional-dependencies]
