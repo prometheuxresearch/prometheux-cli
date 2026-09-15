@@ -44,12 +44,17 @@ def _ssl_context_from_env() -> Optional[ssl.SSLContext]:
 @click.option("--param", "params", multiple=True, metavar="KEY=VALUE",
               help="Run parameter (repeatable).")
 @click.option("--persist", is_flag=True, help="Persist (materialize) the concept's outputs.")
+@click.option("--run-mode", "run_mode", type=click.Choice(["single", "auto", "all"]), default="auto",
+              show_default=True,
+              help="How much of the dependency chain to rebuild: 'single' reuses every "
+                   "populated dependency and rebuilds only what is missing; 'auto' rebuilds "
+                   "stale dependencies while reusing fresh ones; 'all' rebuilds everything.")
 @click.option("--openlineage-file", "ol_file", default=None, type=click.Path(path_type=Path),
               help="Append OpenLineage events here (default: <workspace>/.px/openlineage.jsonl).")
 @click.option("--openlineage-url", "ol_url", default=None,
               help="Also POST each OpenLineage event to this URL (e.g. a Marquez /api/v1/lineage).")
 @click.option("--no-openlineage", is_flag=True, help="Do not emit OpenLineage events.")
-def run(concept, path, ontology_selectors, params, persist, ol_file, ol_url, no_openlineage):
+def run(concept, path, ontology_selectors, params, persist, run_mode, ol_file, ol_url, no_openlineage):
     """Run CONCEPT (an output predicate) and emit OpenLineage lineage events."""
     start = path or Path.cwd()
     root = find_workspace_root(start)
@@ -100,7 +105,7 @@ def run(concept, path, ontology_selectors, params, persist, ol_file, ol_url, no_
     try:
         px.run_concept(
             ontology.id, concept,
-            params=_parse_params(params), persist_outputs=persist,
+            params=_parse_params(params), run_mode=run_mode, persist_outputs=persist,
         )
     except Exception as exc:  # noqa: BLE001
         emitter.emit("FAIL", run_id, job_name, inputs, outputs, error=str(exc))
