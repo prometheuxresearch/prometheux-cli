@@ -202,3 +202,31 @@ def test_an_llm_prompt_survives_either_spelling():
         })
         files = {f.path: f.content for f in reshape_ontology(export, "n", "s").files}
         assert "Summarize {{ customer }}." in files["ontologies/s/concepts/summary.llm.md"]
+
+
+def test_reshape_keeps_the_explorer_position(export_dict):
+    # Order is authored state (set by reordering in the explorer), not run
+    # state: dropping it means a pull/apply round trip lands every concept at
+    # the bottom, alphabetically.
+    result = reshape_ontology(export_dict, ontology_name="x", slug="s")
+    files = {f.path: f.content for f in result.files}
+    assert yaml.safe_load(files["ontologies/s/concepts/customer.meta.yaml"])["position"] == 1
+    # Never explicitly ordered -> no key, so a hand-authored file compares equal.
+    assert "position" not in yaml.safe_load(files["ontologies/s/concepts/risk.meta.yaml"])
+
+
+def test_reshape_llm_and_context_keep_the_explorer_position():
+    rows = [
+        {"predicate_name": "brief", "concept_type": "llm", "definition": "Summarise {risk}.",
+         "concept_config": {}, "position": 4},
+        {"predicate_name": "policy", "concept_type": "context", "definition": "",
+         "concept_config": {"mode": "dynamic", "query": "q"}, "position": "5"},
+    ]
+    export = {"ontology_id": "o1", "tables": {
+        "ontologies_workspace_id": {"data": [{"ontology_id": "o1", "name": "O"}]},
+        "concepts_o1": {"data": rows},
+    }}
+    files = {f.path: f.content for f in reshape_ontology(export, ontology_name="O", slug="s").files}
+    frontmatter = files["ontologies/s/concepts/brief.llm.md"].split("---\n")[1]
+    assert yaml.safe_load(frontmatter)["position"] == 4
+    assert yaml.safe_load(files["ontologies/s/concepts/policy.context.yaml"])["position"] == 5

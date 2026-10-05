@@ -38,12 +38,13 @@ _EXT_BY_TYPE = {
 }
 
 # Concept columns that are server-derived state and are never serialized.
+# `position` is NOT here: it is the explorer order the user set, authored
+# state that has to survive a pull/apply round trip.
 _DERIVED_COLUMNS = {
     "is_populated",
     "row_count",
     "timestamp",
     "author",
-    "position",
     "execution_time_ms",
     "is_deterministic",
     "metadata",
@@ -233,6 +234,7 @@ def _reshape_concept(row: dict, base: str, result: ReshapeResult, yaml, sources:
     elif ctype == "llm":
         fm = {"conceptType": "llm", "outputPredicate": predicate}
         _copy_if(fm, "group", row.get("concept_group"))
+        _copy_position(fm, row)
         llm_config = _clean_config(row.get("concept_config"))
         if llm_config:
             fm["llmConfig"] = llm_config
@@ -242,6 +244,7 @@ def _reshape_concept(row: dict, base: str, result: ReshapeResult, yaml, sources:
         cfg = _clean_config(row.get("concept_config"))
         mode = (cfg.get("mode") or "static").strip().lower()
         doc = {"conceptType": "context", "outputPredicate": predicate, "contextMode": mode}
+        _copy_position(doc, row)
         if mode == "dynamic":
             doc["query"] = cfg.get("query") or ""
             if cfg.get("top_k") is not None:
@@ -272,6 +275,7 @@ def _concept_meta(row: dict, ctype: str, predicate: str) -> dict:
     }
     _copy_if(meta, "group", row.get("concept_group"))
     _copy_if(meta, "description", row.get("description"))
+    _copy_position(meta, row)
     fields = _fields_to_list(row.get("fields"))
     if fields:
         meta["fields"] = fields
@@ -300,6 +304,21 @@ def _collect_annotations(row: dict) -> Dict[str, object]:
 def _copy_if(target: dict, key: str, value) -> None:
     if value not in (None, "", "group_id"):
         target[key] = value
+
+
+def _copy_position(target: dict, row: dict) -> None:
+    """The concept's explorer order, when the user has set one.
+
+    ``position`` is NULL until a reorder in the explorer numbers the concepts
+    of a group 1..N, so only concepts the user actually ordered carry it.
+    """
+    position = row.get("position")
+    if position is None or position == "":
+        return
+    try:
+        target["position"] = int(position)
+    except (TypeError, ValueError):
+        return
 
 
 def _ensure_newline(text: str) -> str:

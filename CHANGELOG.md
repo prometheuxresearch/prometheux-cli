@@ -14,6 +14,15 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.3.8] - 2026-10-05
+
+### Fixed
+- `px pull` now writes each concept's explorer order (`position`) to its meta
+  file, and `px apply` sends it back. Previously `position` was treated as
+  server-derived state and dropped, so a pull/apply round trip recreated
+  concepts in dependency order and lost the order set in the UI. `px plan`
+  reports a changed position as a metadata update.
+
 ## [0.3.6] - 2026-09-11
 
 ### Changed
