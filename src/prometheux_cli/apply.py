@@ -153,6 +153,10 @@ def concept_save_kwargs(
         kwargs["group"] = meta["group"]
     if meta.get("description"):
         kwargs["description"] = meta["description"]
+    # Explorer order travels with the concept; without it a fresh apply lands
+    # every concept at the bottom, alphabetically.
+    if meta.get("position") is not None:
+        kwargs["position"] = int(meta["position"])
 
     bind_column = (meta.get("annotations") or {}).get("bind_annotations")
     binds = structured_binds(bind_column, predicate) if bind_column is not None else None

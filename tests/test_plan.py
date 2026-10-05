@@ -54,6 +54,28 @@ def test_unchanged(export_dict):
     assert all(c.action == "unchanged" for c in result.concept_changes)
 
 
+def test_reorder_alone_is_a_metadata_change(export_dict):
+    # The export has customer at position 1. Moving it locally must plan an
+    # update, otherwise a reorder never reaches the server on apply.
+    local = _local([
+        _concept("customer", "customer(Id, Name) :- source_customers(Id, Name).", position=2),
+        _concept("risk", "risk(Id) :- customer(Id, _)."),
+    ])
+    result = plan_ontology(local, export_dict)
+    customer = next(c for c in result.concept_changes if c.predicate == "customer")
+    assert customer.action == "update"
+    assert not customer.definition_changed
+
+
+def test_same_position_is_unchanged(export_dict):
+    local = _local([
+        _concept("customer", "customer(Id, Name) :- source_customers(Id, Name).", position=1),
+        _concept("risk", "risk(Id) :- customer(Id, _)."),
+    ])
+    result = plan_ontology(local, export_dict)
+    assert not result.has_changes
+
+
 def test_rules_change_cascades_downstream(export_dict):
     local = _local([
         _concept("customer", "customer(Id, Name, Country) :- source_customers(Id, Name, Country)."),
