@@ -34,6 +34,18 @@ would break a script.
   needs `prometheux_chain` 0.4.3 or later. The ontology's context notes are still
   pulled the 0.3.5 way, seeding `.px/context-state.json`; the server's copy of them
   in the tree is skipped so the notes are not listed twice.
+- Concept positions (0.3.8) now come from the server's tree as well. A platform
+  whose export predates them pulls concepts without a `position`, so `px plan`
+  reports no position change and `px apply` sends none.
+
+## [0.3.8] - 2026-10-05
+
+### Fixed
+- `px pull` now writes each concept's explorer order (`position`) to its meta
+  file, and `px apply` sends it back. Previously `position` was treated as
+  server-derived state and dropped, so a pull/apply round trip recreated
+  concepts in dependency order and lost the order set in the UI. `px plan`
+  reports a changed position as a metadata update.
 
 ## [0.3.6] - 2026-09-11
 

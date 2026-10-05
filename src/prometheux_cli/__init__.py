@@ -6,4 +6,4 @@ platform I/O goes through prometheux_chain. The file tree itself is built by the
 server, so `pull` only writes down what `/ontologies/export-tree` returns.
 """
 
-__version__ = "0.3.7"
+__version__ = "0.3.8"

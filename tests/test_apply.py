@@ -56,6 +56,15 @@ def test_concept_save_kwargs_create_vs_update():
     assert update["force_overwrite"] is True
 
 
+def test_concept_save_kwargs_carry_the_explorer_position():
+    ordered = _c("customer", "customer(X) :- s(X).", position=3)
+    assert concept_save_kwargs(ordered, update=False)["position"] == 3
+    assert concept_save_kwargs(ordered, update=True)["position"] == 3
+
+    unordered = _c("risk", "risk(X) :- customer(X).")
+    assert "position" not in concept_save_kwargs(unordered, update=False)
+
+
 def test_project_missing_detects_deleted_project():
     from prometheux_cli.commands.apply import _ontology_missing
     assert _ontology_missing(None) is True
