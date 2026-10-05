@@ -55,6 +55,27 @@ def test_unknown_datasource_fails(tmp_path: Path):
     assert "unknown datasource" in result.output
 
 
+def _set_refresh_mode(root: Path, mode: str) -> None:
+    meta = root / "ontologies" / "example" / "concepts" / "risk_score.meta.yaml"
+    meta.write_text(meta.read_text() + f"refreshMode: {mode}\n", "utf-8")
+
+
+def test_a_frozen_concept_validates(tmp_path: Path):
+    """A pull marks a frozen concept with refreshMode: checkpoint."""
+    root = _init(tmp_path)
+    _set_refresh_mode(root, "checkpoint")
+    result = CliRunner().invoke(cli, ["validate", str(root)])
+    assert result.exit_code == 0, result.output
+
+
+def test_an_unknown_refresh_mode_fails(tmp_path: Path):
+    root = _init(tmp_path)
+    _set_refresh_mode(root, "frozen")
+    result = CliRunner().invoke(cli, ["validate", str(root)])
+    assert result.exit_code == 1
+    assert "refreshMode" in result.output
+
+
 def test_no_workspace_found(tmp_path: Path):
     runner = CliRunner()
     result = runner.invoke(cli, ["validate", str(tmp_path)])

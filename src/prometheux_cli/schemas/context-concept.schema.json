@@ -15,6 +15,11 @@
       "type": "integer",
       "description": "Explorer display order within the concept's group (1-based), set by reordering in the UI. Omitted when the concept was never explicitly ordered."
     },
+    "refreshMode": {
+      "type": "string",
+      "enum": ["default", "checkpoint"],
+      "description": "checkpoint freezes the concept: runs reaching it as a dependency reuse its last output instead of rebuilding it. Written on pull only for a frozen concept; when omitted, apply leaves the live value as it is."
+    },
     "notes": {
       "type": "array",
       "description": "static only — paths into this project's context vault (ADR 0006: project scope). Resolved to note ids at apply.",

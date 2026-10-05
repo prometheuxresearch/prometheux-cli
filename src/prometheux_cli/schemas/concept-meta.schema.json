@@ -27,6 +27,11 @@
       "type": "string",
       "description": "Human/agent-readable description (pulled from the server; optional when hand-authoring)."
     },
+    "refreshMode": {
+      "type": "string",
+      "enum": ["default", "checkpoint"],
+      "description": "checkpoint freezes the concept: runs reaching it as a dependency reuse its last output instead of rebuilding it. Written on pull only for a frozen concept; when omitted, apply leaves the live value as it is."
+    },
     "annotations": {
       "type": "object",
       "description": "Verbatim server annotation columns preserved on pull (bind_annotations, param_annotations, post_annotations, model_annotation, mapping_annotations). The lossless capture apply consumes. Prefer the friendly `binds`/`fields` when hand-authoring.",
