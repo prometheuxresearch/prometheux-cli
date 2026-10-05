@@ -14,6 +14,30 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+### Removed
+- **Breaking: `px` now requires a platform with the ontology file-tree endpoints.**
+  Support for pre-rename servers is gone: the CLI reads only `ontology_id` /
+  `ontologies_*` / `definition`, never the older `project_id` / `projects_*` /
+  `rules` spellings. Point `px` at an older platform and `px pull` stops with a
+  message telling you to update it — it no longer silently does something
+  different. Stay on `px` 0.3.x if you need to talk to one.
+- The reshape engine (`prometheux_cli/reshape.py`) is deleted. The server builds
+  the tree now, so a second implementation here could only drift from it. Its
+  test suite moved to `jarvispy` alongside the engine that survived.
+
+### Changed
+- `px pull` asks the server to build the file tree (`POST /ontologies/export-tree`)
+  and just writes the files down. A pull and an ontology exported from the web app
+  are byte-for-byte the same tree, so a workspace can be handed between terminal
+  and browser without either side re-serializing it differently.
+- `px pull` reaches `/export-tree` through `prometheux_chain.export_tree`, so it
+  needs `prometheux_chain` 0.4.3 or later. The ontology's context notes are still
+  pulled the 0.3.5 way, seeding `.px/context-state.json`; the server's copy of them
+  in the tree is skipped so the notes are not listed twice.
+- Concept positions (0.3.8) now come from the server's tree as well. A platform
+  whose export predates them pulls concepts without a `position`, so `px plan`
+  reports no position change and `px apply` sends none.
+
 ## [0.3.8] - 2026-10-05
 
 ### Fixed
