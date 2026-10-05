@@ -127,6 +127,8 @@ def _render(result: PlanResult, is_new: bool) -> bool:
         click.echo("  " + click.style("+ ontology schema", fg="green") + "  create")
     elif result.ontology_change == "update":
         click.echo("  " + click.style("~ ontology schema", fg="yellow") + "  update in-place")
+    if result.description_change == "update":
+        click.echo("  " + click.style("~ ontology description", fg="yellow") + "  update in-place")
 
     for a in result.app_changes:
         if a.action == "create":

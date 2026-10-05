@@ -14,6 +14,9 @@ from typing import Dict, List, Optional
 from .parsing import ParseError, load_yaml, split_frontmatter
 
 # Body extension -> concept type (the Vadalog-family, which carry a .meta.yaml).
+# The longest ontology description the platform stores; it truncates past it.
+ONTOLOGY_DESCRIPTION_MAX = 500
+
 _BODY_KINDS = {
     ".vadalog": "logic",
     ".sql": "sql",
@@ -50,6 +53,7 @@ class LocalOntology:
     slug: str
     id: Optional[str]
     name: str
+    description: Optional[str] = None
     concepts: List[LocalConcept] = field(default_factory=list)
     datasources: Dict[str, dict] = field(default_factory=dict)
     datasource_paths: Dict[str, Path] = field(default_factory=dict)
@@ -99,6 +103,17 @@ def load_workspace(root: Path) -> LocalWorkspace:
     return workspace
 
 
+def _manifest_description(meta: dict) -> Optional[str]:
+    """The manifest's description, or None when it states none.
+
+    An explicit empty string is kept: it clears the live description, where an
+    absent key leaves it alone.
+    """
+    if "description" not in meta or meta["description"] is None:
+        return None
+    return str(meta["description"]).strip()
+
+
 def _load_ontology(onto_dir: Path, ref: str) -> LocalOntology:
     proj = load_yaml(onto_dir / "prometheux.yaml")
     meta = proj.get("ontology") or {}
@@ -107,6 +122,7 @@ def _load_ontology(onto_dir: Path, ref: str) -> LocalOntology:
         slug=slug,
         id=meta.get("id"),
         name=meta.get("name") or slug,
+        description=_manifest_description(meta),
         directory=onto_dir,
         manifest_path=onto_dir / "prometheux.yaml",
     )

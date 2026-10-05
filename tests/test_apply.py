@@ -972,3 +972,104 @@ def test_apply_skips_unchanged_ontology(tmp_path: Path, export_dict, monkeypatch
     result = runner.invoke(cli, ["apply", str(tmp_path), "--yes"])
     assert result.exit_code == 0, result.output
     assert fake.ontologies_saved == []  # unchanged ontology is not re-pushed
+
+
+# ---- ontology description ------------------------------------------------
+
+_MANIFEST = Path("ontologies") / "al-dente-supply-chain" / "prometheux.yaml"
+
+
+def _described(export_dict, tree, description):
+    """The live ontology and the tree the server builds from it, both described."""
+    export_dict["tables"]["ontologies_workspace_id"]["data"][0]["description"] = description
+    manifest = next(f for f in tree["files"] if f["path"] == _MANIFEST.as_posix())
+    manifest["content"] = manifest["content"].replace(
+        "  name: Al Dente Supply Chain\n",
+        f"  name: Al Dente Supply Chain\n  description: {description}\n")
+    return export_dict
+
+
+def _recording_px(export):
+    fake = _FakePx(export)
+    fake.ontology_rows = []
+    fake.save_ontology = lambda oid, name, description=None: (
+        fake.ontology_rows.append((oid, name, description)), oid or "NEWID")[1]
+    return fake
+
+
+def _edit_manifest(tmp_path: Path, edit):
+    import yaml
+
+    path = tmp_path / _MANIFEST
+    data = yaml.safe_load(path.read_text())
+    edit(data)
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+
+
+def test_apply_creates_an_ontology_with_its_description(tmp_path: Path, export_dict, monkeypatch, pulls_tree):
+    fake = _recording_px(_described(export_dict, pulls_tree, "Pasta logistics"))
+    _wire(monkeypatch, fake)
+    _pull(CliRunner(), tmp_path)
+    _edit_manifest(tmp_path, lambda m: m["ontology"].pop("id"))
+    fake.list_ontologies = lambda: []
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.ontology_rows[0] == (None, "Al Dente Supply Chain", "Pasta logistics")
+
+
+def test_apply_updates_a_changed_description_keeping_the_live_name(
+        tmp_path: Path, export_dict, monkeypatch, pulls_tree):
+    fake = _recording_px(_described(export_dict, pulls_tree, "Old text"))
+    _wire(monkeypatch, fake)
+    _pull(CliRunner(), tmp_path)
+    _edit_manifest(tmp_path, lambda m: m["ontology"].update(description="New text", name="Renamed"))
+    fake.list_ontologies = lambda: [{"id": "abc123", "name": "Al Dente Supply Chain"}]
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert "ontology description" in result.output
+    assert fake.ontology_rows == [("abc123", "Al Dente Supply Chain", "New text")]
+
+
+def test_apply_leaves_the_description_alone_when_the_manifest_has_none(
+        tmp_path: Path, export_dict, monkeypatch, pulls_tree):
+    fake = _recording_px(_described(export_dict, pulls_tree, "Keep me"))
+    _wire(monkeypatch, fake)
+    _pull(CliRunner(), tmp_path)
+    _edit_manifest(tmp_path, lambda m: m["ontology"].pop("description"))
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.ontology_rows == []
+
+
+def test_a_pulled_description_round_trips_without_a_change(
+        tmp_path: Path, export_dict, monkeypatch, pulls_tree):
+    fake = _recording_px(_described(export_dict, pulls_tree, "Same"))
+    _wire(monkeypatch, fake)
+    _pull(CliRunner(), tmp_path)
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.ontology_rows == []
+
+
+def test_adopting_a_same_name_ontology_syncs_its_description(
+        tmp_path: Path, export_dict, monkeypatch, pulls_tree):
+    fake = _recording_px(_described(export_dict, pulls_tree, "From the file"))
+    _wire(monkeypatch, fake)
+    _pull(CliRunner(), tmp_path)
+    _edit_manifest(tmp_path, lambda m: m["ontology"].pop("id"))
+    fake.list_ontologies = lambda: [
+        {"id": "abc123", "name": "Al Dente Supply Chain", "description": "Stale"}
+    ]
+
+    result = CliRunner().invoke(cli, ["apply", str(tmp_path), "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.ontology_rows == [("abc123", "Al Dente Supply Chain", "From the file")]

@@ -17,7 +17,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import click
 
@@ -36,7 +36,7 @@ from ..datasources import (
     is_file_based,
     resolve_secrets,
 )
-from ..loader import LocalOntology, load_workspace, select_ontologies
+from ..loader import ONTOLOGY_DESCRIPTION_MAX, LocalOntology, load_workspace, select_ontologies
 from ..plan import (
     PlanResult,
     fetch_server_apps,
@@ -212,6 +212,8 @@ def _apply_ontology(px, ontology: LocalOntology, result: PlanResult, *, prune: b
     if not ontology.id:
         ontology.id = _resolve_or_create_ontology(px, ontology)
         _persist_ontology_id(ontology)
+    elif result.description_change == "update":
+        _apply_description(px, ontology, result)
 
     # Record how this ontology's id resolved, so apps (in any ontology) that embed
     # the manifest's original id get it rewritten to the actual server id. This
@@ -571,6 +573,10 @@ def _resolve_or_create_ontology(px, ontology: LocalOntology) -> str:
     if len(existing) == 1:
         pid = str(existing[0].get("id"))
         click.echo(f"  adopted existing ontology {pid} (same name on the account — no duplicate created)")
+        wanted = ontology.description
+        if wanted is not None and wanted[:ONTOLOGY_DESCRIPTION_MAX] != (existing[0].get("description") or ""):
+            ontology.id = pid
+            _apply_description(px, ontology, None)
         return pid
     if len(existing) > 1:
         click.echo(
@@ -578,7 +584,7 @@ def _resolve_or_create_ontology(px, ontology: LocalOntology) -> str:
             f"'{ontology.name}'; creating a new one (can't disambiguate — set ontology.id to target one)"
         )
     try:
-        pid = px.save_ontology(None, ontology.name)
+        pid = px.save_ontology(None, ontology.name, description=ontology.description)
         if not pid:
             # Defensive: a create must return an id. If it doesn't (e.g. the save
             # response shape changes), aborting here prevents the far worse failure
@@ -600,6 +606,21 @@ def _resolve_or_create_ontology(px, ontology: LocalOntology) -> str:
             err=True,
         )
         sys.exit(1)
+
+
+def _apply_description(px, ontology: LocalOntology, result: Optional[PlanResult]) -> None:
+    """Set the manifest's description on an existing ontology.
+
+    The server's save writes the whole row, so the live name goes with it: the
+    manifest's name is how the ontology was matched, not a rename.
+    """
+    live_name = result.server_ontology_name if result else None
+    try:
+        px.save_ontology(ontology.id, live_name or ontology.name,
+                         description=ontology.description or "")
+        click.echo("  updated ontology description")
+    except Exception as exc:  # noqa: BLE001 - metadata must not block the concepts
+        click.echo(f"  {click.style('warning', fg='yellow')} description update failed: {exc}")
 
 
 def _persist_ontology_id(ontology: LocalOntology) -> None:

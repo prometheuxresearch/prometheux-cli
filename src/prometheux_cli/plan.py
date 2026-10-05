@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 
-from .loader import LocalConcept, LocalOntology
+from .loader import ONTOLOGY_DESCRIPTION_MAX, LocalConcept, LocalOntology
 
 _PREDICATE_RE = re.compile(r"([a-zA-Z_]\w*)\s*\(")
 _TRUTHY = {True, "true", "True", "t", "1", 1}
@@ -63,6 +63,12 @@ class PlanResult:
     warnings: List[str] = field(default_factory=list)
     populated: Set[str] = field(default_factory=set)
     ontology_change: Optional[str] = None  # create | update | unchanged | None (no local ontology)
+    # The manifest's description: None when it states none, which leaves the
+    # live description alone.
+    description_change: Optional[str] = None
+    # The live ontology name, sent back with a description update because the
+    # server's save writes the whole row.
+    server_ontology_name: Optional[str] = None
 
     def _count(self, action: str) -> int:
         return sum(1 for c in self.concept_changes if c.action == action)
@@ -90,6 +96,7 @@ class PlanResult:
             or any(d.action != "unchanged" for d in self.datasource_changes)
             or any(a.action != "unchanged" for a in self.app_changes)
             or self.ontology_change in {"create", "update"}
+            or self.description_change == "update"
         )
 
 
@@ -211,6 +218,7 @@ def plan_ontology(local: LocalOntology, export: Optional[dict], note_resolver=No
 
     _diff_datasources(local, export, server_datasources, result, with_files=with_files)
     _diff_ontology(local, export, result)
+    _diff_description(local, export, result)
     _diff_apps(local, server_apps, result)
     return result
 
@@ -519,6 +527,25 @@ def fetch_server_apps(px, ontology_id: str) -> List[dict]:
         except Exception:  # noqa: BLE001
             apps.append({"id": app_id, "name": meta.get("name"), "definition": {}})
     return apps
+
+
+def _diff_description(local: LocalOntology, export: Optional[dict], result: PlanResult) -> None:
+    """Classify the ontology description; untouched when the manifest omits it.
+
+    Compared at the length the server stores, so a longer description does not
+    show as a change on every plan.
+    """
+    if local.description is None:
+        return
+    wanted = local.description[:ONTOLOGY_DESCRIPTION_MAX]
+    if not export:
+        result.description_change = "create" if wanted else None
+        return
+    rows = _table(export, "ontologies_")
+    row = rows[0] if rows else {}
+    result.server_ontology_name = row.get("name")
+    live = row.get("description") or ""
+    result.description_change = "update" if wanted != live else "unchanged"
 
 
 def _diff_ontology(local: LocalOntology, export: Optional[dict], result: PlanResult) -> None:
