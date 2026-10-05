@@ -23,7 +23,7 @@
     },
     {
       "path": "ontologies/al-dente-supply-chain/concepts/customer.meta.yaml",
-      "content": "$schema: ../../../.px/schemas/concept-meta.schema.json\nconceptType: logic\noutputPredicate: customer\ngroup: ingest\ndescription: Ingest customers.\nfields:\n- name: Id\n  type: string\n- name: Name\n  type: string\nannotations:\n  bind_annotations:\n    input: []\n    output: '@bind(\"customer\",\"parquet\",\"disk/results/abc123\",\"customer\")'\n"
+      "content": "$schema: ../../../.px/schemas/concept-meta.schema.json\nconceptType: logic\noutputPredicate: customer\ngroup: ingest\ndescription: Ingest customers.\nposition: 1\nfields:\n- name: Id\n  type: string\n- name: Name\n  type: string\nannotations:\n  bind_annotations:\n    input: []\n    output: '@bind(\"customer\",\"parquet\",\"disk/results/abc123\",\"customer\")'\n"
     },
     {
       "path": "ontologies/al-dente-supply-chain/concepts/risk.vadalog",

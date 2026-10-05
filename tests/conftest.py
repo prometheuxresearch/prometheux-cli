@@ -84,6 +84,7 @@ def export_dict():
                         "description": "Ingest customers.",
                         "is_populated": "true",
                         "author": "devuser",
+                        "position": 1,
                     },
                     {
                         "predicate_name": "risk",

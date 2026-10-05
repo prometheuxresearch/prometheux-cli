@@ -11,6 +11,10 @@
     "conceptType": { "type": "string", "const": "context" },
     "outputPredicate": { "type": "string", "minLength": 1 },
     "contextMode": { "type": "string", "enum": ["static", "dynamic"] },
+    "position": {
+      "type": "integer",
+      "description": "Explorer display order within the concept's group (1-based), set by reordering in the UI. Omitted when the concept was never explicitly ordered."
+    },
     "notes": {
       "type": "array",
       "description": "static only — paths into this project's context vault (ADR 0006: project scope). Resolved to note ids at apply.",

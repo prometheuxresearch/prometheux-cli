@@ -305,7 +305,18 @@ def _metadata_changed(concept: LocalConcept, row: dict) -> bool:
         return True
     if "description" in meta and (meta.get("description") or "") != (row.get("description") or ""):
         return True
+    if "position" in meta and _as_int(meta.get("position")) != _as_int(row.get("position")):
+        return True
     return False
+
+
+def _as_int(value):
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _ds_port(value) -> str:
