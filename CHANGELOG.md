@@ -38,6 +38,13 @@ would break a script.
   whose export predates them pulls concepts without a `position`, so `px plan`
   reports no position change and `px apply` sends none.
 
+### Fixed
+- `px validate` accepts `refreshMode` on a concept's meta and context files, with
+  the platform's three values: `default`, `checkpoint` (frozen) and `always`
+  (rebuilt wherever a run reaches it). The platform writes it into an exported
+  tree for any concept not on the default mode, and these schemas reject unknown
+  keys, so a tree carrying it failed validation.
+
 ## [0.3.8] - 2026-10-05
 
 ### Fixed
