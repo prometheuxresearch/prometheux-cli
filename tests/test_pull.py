@@ -39,6 +39,32 @@ def test_pull_writes_and_validates(tmp_path: Path, monkeypatch, pulls_tree):
     assert "PASS" in v.output
 
 
+def _edit_file(tree: dict, suffix: str, edit) -> None:
+    entry = next(e for e in tree["files"] if e["path"].endswith(suffix))
+    entry["content"] = edit(entry["content"])
+
+
+def test_pull_validates_every_field_the_server_writes(tmp_path: Path, monkeypatch, pulls_tree):
+    """The fields the platform writes only on some ontologies must validate too.
+
+    The recorded tree predates them, and these schemas reject unknown keys: a
+    platform field missing here fails `px validate` on every pull that carries it.
+    """
+    _wire(monkeypatch)
+    _edit_file(pulls_tree, "/prometheux.yaml", lambda c: c.replace(
+        "  name: Al Dente Supply Chain\n",
+        "  name: Al Dente Supply Chain\n  description: Supplier risk across the chain\n"))
+    _edit_file(pulls_tree, "/customer.meta.yaml", lambda c: c + "refreshMode: checkpoint\n")
+    _edit_file(pulls_tree, "/risk.meta.yaml", lambda c: c + "refreshMode: always\n")
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["pull", "abc123", "--out", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+
+    v = runner.invoke(cli, ["validate", str(tmp_path)])
+    assert v.exit_code == 0, v.output
+
+
 def test_pull_writes_apps_and_counts_them_separately(tmp_path: Path, monkeypatch, tree_response):
     """Apps land under apps/, and the summary counts them apart from the file total."""
     _wire(monkeypatch)
