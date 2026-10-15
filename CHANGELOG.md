@@ -14,6 +14,12 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+### Added
+- The ontology's `description` round-trips. `px pull` writes it into the manifest's
+  `ontology` block, `px apply` sets it on a created ontology and updates it on an
+  existing one, and `px plan` shows the change. A manifest without a description
+  leaves the live one alone; an empty string clears it.
+
 ### Removed
 - **Breaking: `px` now requires a platform with the ontology file-tree endpoints.**
   Support for pre-rename servers is gone: the CLI reads only `ontology_id` /
