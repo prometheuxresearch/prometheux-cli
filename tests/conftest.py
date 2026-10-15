@@ -1,6 +1,32 @@
-"""Shared test fixtures: a realistic project export dict."""
+"""Shared test fixtures: an ontology as the server hands it over, both ways.
+
+``export_dict`` is the raw export blob `px plan` / `px apply` diff against.
+``tree_response`` is what ``/ontologies/export-tree`` returns for that same
+ontology — recorded from the real server engine, since the CLI no longer builds
+trees itself and hand-writing one would only encode our assumptions about it.
+"""
+
+import json
+from pathlib import Path
 
 import pytest
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture
+def tree_response():
+    """A recorded ``/export-tree`` response for the `export_dict` ontology."""
+    return json.loads((_FIXTURES / "export_tree_response.json").read_text("utf-8"))
+
+
+@pytest.fixture
+def pulls_tree(monkeypatch, tree_response):
+    """Make `px pull` return the recorded tree instead of calling a server."""
+    from prometheux_cli.commands import pull as pull_cmd
+
+    monkeypatch.setattr(pull_cmd, "_fetch_tree", lambda *a, **k: tree_response)
+    return tree_response
 
 
 @pytest.fixture

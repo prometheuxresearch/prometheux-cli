@@ -36,13 +36,13 @@ class _FakePx:
     def list_ontologies(self):
         return self.projects
 
-    def save_ontology(self, _id, name):
+    def save_ontology(self, _id, name, description=None):
         self.created.append(name)
         return "NEW_ID"
 
 
 def _proj():
-    return SimpleNamespace(name="Demo")
+    return SimpleNamespace(name="Demo", description=None)
 
 
 def test_resolve_adopts_single_existing_project():
