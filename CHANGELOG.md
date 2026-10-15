@@ -14,6 +14,13 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+### Fixed
+- `px validate` accepts `refreshMode` on a concept's meta and context files, with
+  the platform's three values: `default`, `checkpoint` (frozen) and `always`
+  (rebuilt wherever a run reaches it). The platform writes it into an exported
+  tree for any concept not on the default mode, and these schemas reject unknown
+  keys, so a tree carrying it failed validation.
+
 ## [0.3.8] - 2026-10-05
 
 ### Fixed

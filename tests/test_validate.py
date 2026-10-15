@@ -68,6 +68,14 @@ def test_a_frozen_concept_validates(tmp_path: Path):
     assert result.exit_code == 0, result.output
 
 
+def test_an_always_rerun_concept_validates(tmp_path: Path):
+    """A pull marks a concept that is never treated as current with refreshMode: always."""
+    root = _init(tmp_path)
+    _set_refresh_mode(root, "always")
+    result = CliRunner().invoke(cli, ["validate", str(root)])
+    assert result.exit_code == 0, result.output
+
+
 def test_an_unknown_refresh_mode_fails(tmp_path: Path):
     root = _init(tmp_path)
     _set_refresh_mode(root, "frozen")

@@ -29,8 +29,8 @@
     },
     "refreshMode": {
       "type": "string",
-      "enum": ["default", "checkpoint"],
-      "description": "checkpoint freezes the concept: runs reaching it as a dependency reuse its last output instead of rebuilding it. Written on pull only for a frozen concept; when omitted, apply leaves the live value as it is."
+      "enum": ["default", "checkpoint", "always"],
+      "description": "checkpoint freezes the concept: runs reaching it as a dependency reuse its last output instead of rebuilding it. always is the opposite: the concept is never treated as current, so a run rebuilds it wherever it is reached. Written on pull only when not default; when omitted, apply leaves the live value as it is."
     },
     "annotations": {
       "type": "object",
