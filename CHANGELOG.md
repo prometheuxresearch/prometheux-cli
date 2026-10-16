@@ -15,6 +15,11 @@ would break a script.
      publishes the matching section as the GitHub Release notes. -->
 
 ### Added
+- `px test` unit-tests Vadalog programs on the platform engine. Give it a program and
+  `--expect PRED=CSV`, a natural-language `--question` and `--expect-csv`, or a folder of
+  `*.test.yaml` cases; it compares each expected predicate in `exact` or `contains` mode,
+  exits 1 on a failed check, and can write `--json` or a `--junit-xml` report for CI. Needs
+  `prometheux_chain` 0.4.4, which adds the `check_program` / `check_question` it runs on.
 - The ontology's `description` round-trips. `px pull` writes it into the manifest's
   `ontology` block, `px apply` sets it on a created ontology and updates it on an
   existing one, and `px plan` shows the change. A manifest without a description

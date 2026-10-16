@@ -7,6 +7,7 @@ import click
 from . import __version__
 from .commands import app as app_cmd
 from .commands import apply as apply_cmd
+from .commands import checks as checks_cmd
 from .commands import compute as compute_cmd
 from .commands import context as context_cmd
 from .commands import datasource as datasource_cmd
@@ -45,8 +46,8 @@ def cli() -> None:
 
     Author a workspace (lineage + context) as files, then plan and apply it.
     `init` and `validate` run fully offline; `login`, `pull`, `plan`, `apply`,
-    `run`, and `status` reach the platform. `status --watch` live-monitors each
-    ontology's run state.
+    `run`, `test`, and `status` reach the platform. `status --watch` live-monitors
+    each ontology's run state.
     """
 
 
@@ -61,6 +62,7 @@ cli.add_command(apply_cmd.apply)
 cli.add_command(run_cmd.run)
 cli.add_command(show_cmd.show)
 cli.add_command(query_cmd.query)
+cli.add_command(checks_cmd.run_tests)
 cli.add_command(search_cmd.search)
 cli.add_command(status_cmd.status)
 cli.add_command(context_cmd.context)
