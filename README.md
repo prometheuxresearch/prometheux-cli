@@ -291,7 +291,7 @@ Each `--question` and each question case counts as one program generation in you
 | `-j, --jobs N` | Cases to run at the same time (default 1, or one more than `--replicas`). |
 | `--replicas N\|auto` | Run N engine workers beside your compute machine for the suite, then remove them. `auto`: one per 10 cases, up to the platform cap. |
 | `--replicas-timeout SECONDS` | How long to wait for the workers to be ready (default 600). |
-| `--keep-replicas` | Leave the workers running after the suite; they are removed after 10 idle minutes. |
+| `--keep-replicas` | Leave the workers running, and billed, after the suite; they are removed after 10 idle minutes. |
 
 **Running a large suite faster.** With a compute machine running, `--replicas N` starts N
 engine-only workers beside it, waits until they are ready, runs the cases N+1 at a time across

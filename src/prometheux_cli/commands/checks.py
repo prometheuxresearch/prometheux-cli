@@ -60,7 +60,7 @@ class WorkersUnavailable(Exception):
 @click.option("--replicas-timeout", type=click.IntRange(min=1), default=600, show_default=True,
               help="Seconds to wait for the workers to be ready; a new worker usually needs a new node.")
 @click.option("--keep-replicas", is_flag=True,
-              help="Leave the workers running after the suite (they go after 10 idle minutes).")
+              help="Leave the workers running, and billed, after the suite (they go after 10 idle minutes).")
 def run_tests(target: Optional[Path], expects, question, context, expect_csv, expect_pred,
               mode, header, params, save_vada, as_json, junit_xml, jobs, replicas,
               replicas_timeout, keep_replicas) -> None:
@@ -147,9 +147,14 @@ def _engine_workers(px, count: int, timeout: int, keep: bool, *, quiet: bool):
         return
     if not quiet:
         click.echo(f"Starting {count} engine worker(s); a new one can take a few minutes...", err=True)
-    last = {"ready": None}
+    last = {"ready": None, "priced": False}
 
     def progress(state):
+        rate = float((state.get("billing") or {}).get("cost_per_worker_hour_usd") or 0)
+        if not quiet and rate and not last["priced"]:
+            click.echo(f"  Billed at your machine's rate: ${rate:.2f}/h per worker "
+                       f"(${rate * count:.2f}/h for {count}) until they are removed.", err=True)
+            last["priced"] = True
         ready = int(state.get("ready") or 0)
         if not quiet and ready != last["ready"]:
             click.echo(f"  {ready}/{count} ready", err=True)
@@ -167,7 +172,8 @@ def _engine_workers(px, count: int, timeout: int, keep: bool, *, quiet: bool):
             yield
         finally:
             if not quiet:
-                click.echo("Engine workers kept running (removed after 10 idle minutes)." if keep
+                click.echo("Engine workers kept running, and billed, until they are removed "
+                           "after 10 idle minutes." if keep
                            else "Removing engine workers.", err=True)
 
 

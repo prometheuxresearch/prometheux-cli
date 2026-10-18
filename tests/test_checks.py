@@ -232,7 +232,7 @@ class _WorkersPx(_FakePx):
         try:
             if self.never_ready:
                 raise TimeoutError(f"0 of {n} engine worker(s) ready after {timeout}s")
-            on_progress({"ready": n})
+            on_progress({"ready": n, "billing": {"cost_per_worker_hour_usd": 1.5}})
             yield {"ready": n}
         finally:
             if not keep:
@@ -271,6 +271,7 @@ def test_replicas_bracket_the_suite_and_default_the_jobs(tmp_path: Path, monkeyp
     assert fake.events == [("up", 2), ("down", 2)]
     assert 1 < fake.max_active <= 3
     assert "2/2 ready" in result.output
+    assert "$1.50/h per worker ($3.00/h for 2)" in result.output
 
 
 def test_workers_are_removed_when_a_case_fails(tmp_path: Path, monkeypatch):
