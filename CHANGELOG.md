@@ -14,6 +14,8 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.3.9] - 2026-10-18
+
 ### Added
 - `px test` unit-tests Vadalog programs on the platform engine. Give it a program and
   `--expect PRED=CSV`, a natural-language `--question` and `--expect-csv`, or a folder of
