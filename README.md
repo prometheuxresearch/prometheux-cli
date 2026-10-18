@@ -288,6 +288,19 @@ Each `--question` and each question case counts as one program generation in you
 | `--param KEY=VALUE` | Program parameter (repeatable). |
 | `--json` | Print the reports as JSON. |
 | `--junit-xml PATH` | Also write a JUnit XML report, for CI. |
+| `-j, --jobs N` | Cases to run at the same time (default 1, or one more than `--replicas`). |
+| `--replicas N\|auto` | Run N engine workers beside your compute machine for the suite, then remove them. `auto`: one per 10 cases, up to the platform cap. |
+| `--replicas-timeout SECONDS` | How long to wait for the workers to be ready (default 600). |
+| `--keep-replicas` | Leave the workers running, and billed, after the suite; they are removed after 10 idle minutes. |
+
+**Running a large suite faster.** With a compute machine running, `--replicas N` starts N
+engine-only workers beside it, waits until they are ready, runs the cases N+1 at a time across
+the machine and the workers, and removes the workers when the suite ends, also on a failure or
+Ctrl-C. Each worker is another node of your machine's size and takes a few minutes to start, so
+it pays off on suites that take minutes, not seconds. Without a running machine the command
+exits 2 with the reason. `--jobs` alone runs cases in parallel on the machine. Engine workers
+are in preview and enabled on selected workspaces only; elsewhere `--replicas` exits 2 saying
+they are not available.
 
 Expected CSVs have one row per line and no header unless `--header`. Numbers compare equal
 however they were serialized, so `2`, `"2"` and `2.0` match. A case file names a program or a
@@ -305,6 +318,7 @@ expect:
 px test tc.vada --expect tc=tc.csv
 px test --question "Transitive closure of edge(X,Y). Output as tc." --expect-csv tc.csv --mode contains
 px test tests/ --junit-xml report.xml
+px test tests/ --replicas 2
 ```
 
 The same checks are available in Python as `prometheux_chain.check_program` and

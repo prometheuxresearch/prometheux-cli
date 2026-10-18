@@ -14,6 +14,21 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.4.0] - 2026-10-18
+
+### Added
+- `px test --jobs N` runs N cases at the same time; results still print in case order.
+- `px test --replicas N|auto` runs N engine workers beside your compute machine for the
+  length of the suite and spreads the cases across them, removing them afterwards (also on a
+  failure or Ctrl-C). `auto` picks one per 10 cases, up to the platform cap.
+  `--replicas-timeout` bounds the wait for them to start; `--keep-replicas` leaves them running
+  until they have been idle for 10 minutes. Each worker is billed at the machine's hourly
+  rate, and `px test` prints the cost when they start. Engine workers are in preview and
+  enabled on selected workspaces only.
+
+### Changed
+- Requires `prometheux_chain>=0.4.8`, which adds the engine-workers calls.
+
 ## [0.3.9] - 2026-10-18
 
 ### Added

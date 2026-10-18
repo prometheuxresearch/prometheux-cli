@@ -1,5 +1,8 @@
 import json
+import threading
+import time
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -195,3 +198,153 @@ def test_an_empty_folder_is_a_usage_error(tmp_path: Path, monkeypatch):
 
     assert result.exit_code == 2
     assert "no *.test.yaml files" in result.output
+
+
+# ── parallel runs and engine workers ─────────────────────────────────────────
+
+class _WorkersPx(_FakePx):
+    """A _FakePx whose checks overlap, with engine workers that record their lifecycle."""
+
+    def __init__(self, cap=4, refuse=None, never_ready=False, failing=()):
+        super().__init__(failing=failing)
+        self.cap, self.refuse, self.never_ready = cap, refuse, never_ready
+        self.events = []
+        self.lock = threading.Lock()
+        self.active = self.max_active = 0
+
+    def check_program(self, program, expect=None, **kw):
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+        time.sleep(0.02)
+        with self.lock:
+            self.active -= 1
+        return super().check_program(program, expect=expect, **kw)
+
+    def get_engine_workers(self):
+        return {"max": self.cap, "desired": 0, "ready": 0}
+
+    @contextmanager
+    def engine_workers(self, n, timeout=600, keep=False, on_progress=None):
+        if self.refuse:
+            raise Exception(self.refuse)
+        self.events.append(("up", n))
+        try:
+            if self.never_ready:
+                raise TimeoutError(f"0 of {n} engine worker(s) ready after {timeout}s")
+            on_progress({"ready": n, "billing": {"cost_per_worker_hour_usd": 1.5}})
+            yield {"ready": n}
+        finally:
+            if not keep:
+                self.events.append(("down", n))
+
+
+def _many(tmp_path: Path, n: int) -> Path:
+    suite = tmp_path / "many"
+    suite.mkdir()
+    (suite / "tc.vada").write_text("tc(X,Y) :- edge(X,Y).\n")
+    for i in range(n):
+        (suite / f"c{i:02d}.test.yaml").write_text(f"program: ./tc.vada\nexpect:\n  p{i:02d}: [[1, 2]]\n")
+    return suite
+
+
+def test_jobs_overlap_cases_and_keep_their_order(tmp_path: Path, monkeypatch):
+    fake = _WorkersPx(failing={"p03"})
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 8)), "--jobs", "4"])
+
+    assert result.exit_code == 1
+    assert fake.max_active > 1
+    names = [line.split()[-1] for line in result.output.splitlines() if line.startswith(("PASS  ", "FAIL  "))]
+    assert names == [f"c{i:02d}" for i in range(8)]
+    assert fake.events == []
+
+
+def test_replicas_bracket_the_suite_and_default_the_jobs(tmp_path: Path, monkeypatch):
+    fake = _WorkersPx()
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 6)), "--replicas", "2"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.events == [("up", 2), ("down", 2)]
+    assert 1 < fake.max_active <= 3
+    assert "2/2 ready" in result.output
+    assert "$1.50/h per worker ($3.00/h for 2)" in result.output
+
+
+def test_workers_are_removed_when_a_case_fails(tmp_path: Path, monkeypatch):
+    fake = _WorkersPx(failing={"p01"})
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 3)), "--replicas", "1"])
+
+    assert result.exit_code == 1
+    assert fake.events == [("up", 1), ("down", 1)]
+
+
+def test_keep_replicas_leaves_them_running(tmp_path: Path, monkeypatch):
+    fake = _WorkersPx()
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 2)), "--replicas", "1",
+                                      "--keep-replicas"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.events == [("up", 1)]
+
+
+def test_auto_picks_one_worker_per_ten_cases_up_to_the_cap(tmp_path: Path, monkeypatch):
+    fake = _WorkersPx(cap=2)
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 35)), "--replicas", "auto"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.events == [("up", 2), ("down", 2)]
+    assert "--replicas auto: 2 engine worker(s) for 35 case(s)" in result.output
+
+
+def test_auto_runs_a_small_suite_without_workers(tmp_path: Path, monkeypatch):
+    fake = _WorkersPx()
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 5)), "--replicas", "auto"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.events == []
+    assert fake.max_active == 1
+
+
+def test_workers_that_never_get_ready_exit_2(tmp_path: Path, monkeypatch):
+    fake = _WorkersPx(never_ready=True)
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 2)), "--replicas", "2",
+                                      "--replicas-timeout", "5"])
+
+    assert result.exit_code == 2
+    assert "0 of 2 engine worker(s) ready" in result.output
+    assert fake.programs == []
+    assert fake.events == [("up", 2), ("down", 2)]
+
+
+def test_a_refusal_from_the_platform_exits_2(tmp_path: Path, monkeypatch):
+    fake = _WorkersPx(refuse="No compute machine is running; start one before adding workers")
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 2)), "--replicas", "1"])
+
+    assert result.exit_code == 2
+    assert "engine workers: No compute machine is running" in result.output
+    assert fake.programs == []
+
+
+def test_replicas_must_be_a_number_or_auto(tmp_path: Path, monkeypatch):
+    _connect(monkeypatch, _WorkersPx())
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 2)), "--replicas", "lots"])
+
+    assert result.exit_code == 2
+    assert "number or 'auto'" in result.output
