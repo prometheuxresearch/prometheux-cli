@@ -24,7 +24,8 @@ dependencies = [
     # called the retired /ontologies/export-project and /import-project aliases
     # the backend no longer serves — pull/plan/apply would 404 against a current pod.)
     # 0.4.4 adds check_program / check_question, which `px test` runs on.
-    "prometheux_chain>=0.4.4",
+    # 0.4.7 adds engine_workers, which `px test --replicas` runs on.
+    "prometheux_chain>=0.4.7",
 ]
 
 [project.optional-dependencies]
