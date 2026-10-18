@@ -22,7 +22,8 @@ would break a script.
   length of the suite and spreads the cases across them, removing them afterwards (also on a
   failure or Ctrl-C). `auto` picks one per 10 cases, up to the platform cap.
   `--replicas-timeout` bounds the wait for them to start; `--keep-replicas` leaves them running
-  until they have been idle for 10 minutes.
+  until they have been idle for 10 minutes. Engine workers are in preview and enabled on
+  selected workspaces only.
 
 ### Changed
 - Requires `prometheux_chain>=0.4.7`, which adds the engine-workers calls.

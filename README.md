@@ -298,7 +298,9 @@ engine-only workers beside it, waits until they are ready, runs the cases N+1 at
 the machine and the workers, and removes the workers when the suite ends, also on a failure or
 Ctrl-C. Each worker is another node of your machine's size and takes a few minutes to start, so
 it pays off on suites that take minutes, not seconds. Without a running machine the command
-exits 2 with the reason. `--jobs` alone runs cases in parallel on the machine.
+exits 2 with the reason. `--jobs` alone runs cases in parallel on the machine. Engine workers
+are in preview and enabled on selected workspaces only; elsewhere `--replicas` exits 2 saying
+they are not available.
 
 Expected CSVs have one row per line and no header unless `--header`. Numbers compare equal
 however they were serialized, so `2`, `"2"` and `2.0` match. A case file names a program or a
