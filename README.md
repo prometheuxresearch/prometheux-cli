@@ -5,7 +5,7 @@
 `prometheux_chain` SDK.
 
 - `init` and `validate` run **fully offline** (no platform, no SDK).
-- `login`, `pull`, `plan`, `apply`, `run`, `status`, `delete`, `context apply` reach the **platform**.
+- `login`, `pull`, `plan`, `apply`, `run`, `test`, `status`, `delete`, `context apply` reach the **platform**.
 
 The command-by-command reference below is the source of truth for both humans and coding agents.
 Runnable, copy-one-folder usage examples live in [`examples/`](examples/).
@@ -268,6 +268,48 @@ px run risk_score
 px run risk_score --persist --param year=2025 -p "Credit Risk"
 ```
 
+### `px test [TARGET]`
+Unit-test Vadalog programs: each program runs on the platform engine and every expected
+predicate is compared with its rows. TARGET is a `.vada` program (with `--expect`), a
+`*.test.yaml` case, or a folder of cases (searched recursively). With `--question` there is no
+TARGET: the natural-language translator writes the program, which is then checked the same way.
+Each `--question` and each question case counts as one program generation in your usage.
+
+| Option | Meaning |
+|---|---|
+| `--expect PRED=CSV` | Rows PRED must produce (repeatable). For a program TARGET. |
+| `-q, --question TEXT` | Ask the translator for the program. |
+| `--expect-csv PATH` | Rows the generated program must produce (with `--question`). |
+| `--expect-pred TEXT` | Predicate `--expect-csv` applies to (default: the program's last `@output`). |
+| `--context TEXT` | Extra context for the translator (with `--question`). |
+| `--save-vada PATH` | Write the generated program to a file (with `--question`). |
+| `--mode exact\|contains` | `exact` (default): same rows and count. `contains`: every expected row is produced. |
+| `--header` | Expected CSVs start with a header line to skip. |
+| `--param KEY=VALUE` | Program parameter (repeatable). |
+| `--json` | Print the reports as JSON. |
+| `--junit-xml PATH` | Also write a JUnit XML report, for CI. |
+
+Expected CSVs have one row per line and no header unless `--header`. Numbers compare equal
+however they were serialized, so `2`, `"2"` and `2.0` match. A case file names a program or a
+question and its expectations, with paths relative to the case file:
+
+```yaml
+# tests/tc.test.yaml
+program: ./tc.vada        # or: question: "Transitive closure of edge(X,Y). Output as tc."
+mode: exact
+expect:
+  tc: ./tc.csv            # or inline rows: [[1, 2], [2, 3]]
+```
+
+```bash
+px test tc.vada --expect tc=tc.csv
+px test --question "Transitive closure of edge(X,Y). Output as tc." --expect-csv tc.csv --mode contains
+px test tests/ --junit-xml report.xml
+```
+
+The same checks are available in Python as `prometheux_chain.check_program` and
+`check_question`.
+
 ### `px status`
 Monitor run status **account-wide** — no workspace needed. One row per ontology: running /
 success / error / cancelled / interrupted / idle, plus the concept executing and its progress.
@@ -521,7 +563,8 @@ JARVISPY_URL=... PMTX_TOKEN=... PG_PASSWORD=... px apply -y
 - **Idempotent:** a clean `pull` then `plan`/`apply` reports no changes; re-applying is a
   no-op.
 - **Exit codes:** `validate` → 0 PASS / non-zero FAIL. `apply` → 0 on success; non-zero if any
-  concept was skipped (with a summary) or on a hard error. `plan`/`status` → 0.
+  concept was skipped (with a summary) or on a hard error. `plan`/`status` → 0. `test` → 0 when
+  every check passes, 1 when one fails, 2 when the tests could not run.
 
 ---
 
@@ -543,8 +586,9 @@ JARVISPY_URL=... PMTX_TOKEN=... PG_PASSWORD=... px apply -y
 ```
 src/prometheux_cli/
   cli.py            # `px` entry point (click)
-  commands/         # init, validate, login, pull, plan, apply, run, status, delete, context
+  commands/         # init, validate, login, pull, plan, apply, run, test, status, delete, context
   validation.py     # offline schema + structural engine
+  testcases.py      # `px test` case files (*.test.yaml) and the JUnit report
   reshape.py        # export dict -> file tree (pull)
   loader.py         # file tree -> typed model (plan/apply)
   plan.py           # diff engine + downstream cascade + datasource/app diffs
