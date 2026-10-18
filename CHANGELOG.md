@@ -27,7 +27,7 @@ would break a script.
   enabled on selected workspaces only.
 
 ### Changed
-- Requires `prometheux_chain>=0.4.7`, which adds the engine-workers calls.
+- Requires `prometheux_chain>=0.4.8`, which adds the engine-workers calls.
 
 ## [0.3.9] - 2026-10-18
 
