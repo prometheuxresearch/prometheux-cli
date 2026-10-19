@@ -17,6 +17,7 @@ would break a script.
 ### Changed
 - `px test --jobs N` is lowered, with a notice, to how many evaluations the workspace runs
   at once, when the platform reports it; past that, cases would only wait their turn.
+- Requires `prometheux_chain` 0.4.10, which reads that capacity from the platform.
 
 ### Added
 - `px test --replicas` says when a worker is not starting, with the platform's reason
