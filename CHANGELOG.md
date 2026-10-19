@@ -14,6 +14,14 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+### Fixed
+- `px test --jobs N` with N above what the workspace runs at once (24 engine calls) no
+  longer reports the refused cases as failed: each one waits and is sent again, for up to
+  `ENGINE_BUSY_RETRY_SECONDS` (default 120; 0 restores the old behaviour).
+
+### Changed
+- Requires `prometheux_chain>=0.4.9`, which retries those refusals.
+
 ## [0.4.0] - 2026-10-18
 
 ### Added
