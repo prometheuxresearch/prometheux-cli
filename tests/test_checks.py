@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from prometheux_cli import cli as cli_module
@@ -313,6 +314,51 @@ def test_a_bad_image_is_reported_and_odd_values_are_not_printed(tmp_path: Path, 
     assert "worker vpw-a-2 is not starting: ImagePullBackOff" in result.output
     assert "vpw-a-3" not in result.output and "../etc" not in result.output
     assert "\x1b" not in result.output
+
+
+class _CapacityPx(_WorkersPx):
+    def __init__(self, capacity, **kw):
+        super().__init__(**kw)
+        self.capacity = capacity
+
+    def evaluation_status(self):
+        if isinstance(self.capacity, Exception):
+            raise self.capacity
+        return {"status": "ready", "engine_call_capacity": self.capacity}
+
+
+def test_jobs_are_lowered_to_the_workspace_capacity(tmp_path: Path, monkeypatch):
+    fake = _CapacityPx(3)
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 10)), "--jobs", "8"])
+
+    assert result.exit_code == 0, result.output
+    assert "--jobs 8 lowered to 3" in result.output
+    assert 1 < fake.max_active <= 3
+
+
+def test_jobs_within_the_capacity_are_left_alone(tmp_path: Path, monkeypatch):
+    fake = _CapacityPx(24)
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 6)), "--jobs", "4"])
+
+    assert result.exit_code == 0, result.output
+    assert "lowered" not in result.output
+    assert fake.max_active > 1
+
+
+@pytest.mark.parametrize("capacity", [None, 0, -2, "24", True, 2.5, Exception("404")])
+def test_an_unknown_capacity_leaves_the_jobs_as_asked(tmp_path: Path, monkeypatch, capacity):
+    fake = _CapacityPx(capacity)
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_many(tmp_path, 6)), "--jobs", "4"])
+
+    assert result.exit_code == 0, result.output
+    assert "lowered" not in result.output
+    assert fake.max_active > 1
 
 
 def test_workers_are_removed_when_a_case_fails(tmp_path: Path, monkeypatch):
