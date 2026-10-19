@@ -27,7 +27,7 @@ dependencies = [
     # 0.4.8 adds engine_workers, which `px test --replicas` runs on.
     # 0.4.9 retries an evaluation the workspace refused as busy, which a large
     # `px test --jobs` otherwise reports as failed cases.
-    "prometheux_chain>=0.4.9",
+    "prometheux_chain>=0.4.10",
 ]
 
 [project.optional-dependencies]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
@@ -53,7 +54,8 @@ class WorkersUnavailable(Exception):
 @click.option("--junit-xml", type=click.Path(dir_okay=False, path_type=Path),
               help="Also write a JUnit XML report, for CI.")
 @click.option("--jobs", "-j", type=click.IntRange(min=1), default=None,
-              help="Cases to run at the same time (default 1, or one more than --replicas).")
+              help="Cases to run at the same time (default 1, or one more than --replicas); "
+                   "lowered to what the workspace runs at once.")
 @click.option("--replicas", default=None, metavar="N|auto",
               help="Run N engine workers beside your machine while the suite runs, removed "
                    f"afterwards. 'auto' picks one per {CASES_PER_WORKER} cases, up to the platform cap.")
@@ -92,6 +94,7 @@ def run_tests(target: Optional[Path], expects, question, context, expect_csv, ex
     if replicas == "auto" and not as_json:
         click.echo(f"--replicas auto: {workers} engine worker(s) for {len(cases)} case(s).", err=True)
     jobs = jobs or (workers + 1 if workers else 1)
+    jobs = _clamp_jobs(px, jobs, len(cases), quiet=as_json)
 
     single = len(cases) == 1
     results = []
@@ -122,6 +125,28 @@ def run_tests(target: Optional[Path], expects, question, context, expect_csv, ex
         sys.exit(EXIT_FAILED)
 
 
+def _clamp_jobs(px, jobs: int, case_count: int, *, quiet: bool) -> int:
+    """Lower ``jobs`` to how many evaluations the workspace runs at once.
+
+    Cases past that are refused as busy and retried, so a higher ``jobs`` only
+    adds waiting. Left as is when the platform doesn't report it.
+    """
+    if jobs <= 1 or case_count <= 1:
+        return jobs
+    try:
+        capacity = px.evaluation_status().get("engine_call_capacity")
+    except Exception:
+        return jobs
+    if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity < 1:
+        return jobs
+    if jobs > capacity:
+        if not quiet:
+            click.echo(f"--jobs {jobs} lowered to {capacity}, the most evaluations this "
+                       "workspace runs at once.", err=True)
+        return capacity
+    return jobs
+
+
 def _resolve_replicas(px, replicas: Optional[str], case_count: int) -> int:
     if replicas is None:
         return 0
@@ -140,6 +165,39 @@ def _resolve_replicas(px, replicas: Optional[str], case_count: int) -> int:
     return count
 
 
+_POD_NAME = re.compile(r"[a-z0-9][a-z0-9.-]{0,252}")
+_REASON_CODE = re.compile(r"[A-Za-z]{1,64}")
+
+
+def _worker_problems(state, seen) -> List[str]:
+    """New lines about workers that are not starting, each said once.
+
+    A pod still waiting for a node is normal (the cluster is adding one), so only
+    pods already on a node are reported. Names and reason codes come from the
+    server and are printed only when they look like what Kubernetes produces.
+    """
+    lines = []
+    for pod in state.get("pods") or []:
+        name = str(pod.get("name") or "")
+        if not pod.get("node") or pod.get("ready") or not _POD_NAME.fullmatch(name):
+            continue
+        waiting = pod.get("waiting")
+        problem = pod.get("problem")
+        if problem == "FailedScheduling":
+            problem = None
+        if not problem and waiting not in (None, "ContainerCreating"):
+            problem = waiting
+        if problem and _REASON_CODE.fullmatch(str(problem)) and (name, problem) not in seen["problems"]:
+            seen["problems"].add((name, problem))
+            lines.append(f"worker {name} is not starting: {problem}")
+    for name in state.get("replaced") or []:
+        name = str(name)
+        if _POD_NAME.fullmatch(name) and name not in seen["replaced"]:
+            seen["replaced"].add(name)
+            lines.append(f"worker {name} was stuck starting; replacing it")
+    return lines
+
+
 @contextmanager
 def _engine_workers(px, count: int, timeout: int, keep: bool, *, quiet: bool):
     if not count:
@@ -147,7 +205,7 @@ def _engine_workers(px, count: int, timeout: int, keep: bool, *, quiet: bool):
         return
     if not quiet:
         click.echo(f"Starting {count} engine worker(s); a new one can take a few minutes...", err=True)
-    last = {"ready": None, "priced": False}
+    last = {"ready": None, "priced": False, "problems": set(), "replaced": set()}
 
     def progress(state):
         rate = float((state.get("billing") or {}).get("cost_per_worker_hour_usd") or 0)
@@ -159,6 +217,9 @@ def _engine_workers(px, count: int, timeout: int, keep: bool, *, quiet: bool):
         if not quiet and ready != last["ready"]:
             click.echo(f"  {ready}/{count} ready", err=True)
             last["ready"] = ready
+        if not quiet:
+            for line in _worker_problems(state, last):
+                click.echo(f"  {line}", err=True)
 
     with ExitStack() as stack:
         try:
