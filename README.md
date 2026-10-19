@@ -288,7 +288,7 @@ Each `--question` and each question case counts as one program generation in you
 | `--param KEY=VALUE` | Program parameter (repeatable). |
 | `--json` | Print the reports as JSON. |
 | `--junit-xml PATH` | Also write a JUnit XML report, for CI. |
-| `-j, --jobs N` | Cases to run at the same time (default 1, or one more than `--replicas`). |
+| `-j, --jobs N` | Cases to run at the same time (default 1, or one more than `--replicas`); lowered, with a notice, to what the workspace runs at once. |
 | `--replicas N\|auto` | Run N engine workers beside your compute machine for the suite, then remove them. `auto`: one per 10 cases, up to the platform cap. |
 | `--replicas-timeout SECONDS` | How long to wait for the workers to be ready (default 600). |
 | `--keep-replicas` | Leave the workers running, and billed, after the suite; they are removed after 10 idle minutes. |
