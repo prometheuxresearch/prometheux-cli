@@ -14,6 +14,8 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.4.1] - 2026-10-19
+
 ### Fixed
 - `px test --jobs N` with N above what the workspace runs at once (24 engine calls) no
   longer reports the refused cases as failed: each one waits and is sent again, for up to
