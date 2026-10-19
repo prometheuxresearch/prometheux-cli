@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
@@ -140,6 +141,39 @@ def _resolve_replicas(px, replicas: Optional[str], case_count: int) -> int:
     return count
 
 
+_POD_NAME = re.compile(r"[a-z0-9][a-z0-9.-]{0,252}")
+_REASON_CODE = re.compile(r"[A-Za-z]{1,64}")
+
+
+def _worker_problems(state, seen) -> List[str]:
+    """New lines about workers that are not starting, each said once.
+
+    A pod still waiting for a node is normal (the cluster is adding one), so only
+    pods already on a node are reported. Names and reason codes come from the
+    server and are printed only when they look like what Kubernetes produces.
+    """
+    lines = []
+    for pod in state.get("pods") or []:
+        name = str(pod.get("name") or "")
+        if not pod.get("node") or pod.get("ready") or not _POD_NAME.fullmatch(name):
+            continue
+        waiting = pod.get("waiting")
+        problem = pod.get("problem")
+        if problem == "FailedScheduling":
+            problem = None
+        if not problem and waiting not in (None, "ContainerCreating"):
+            problem = waiting
+        if problem and _REASON_CODE.fullmatch(str(problem)) and (name, problem) not in seen["problems"]:
+            seen["problems"].add((name, problem))
+            lines.append(f"worker {name} is not starting: {problem}")
+    for name in state.get("replaced") or []:
+        name = str(name)
+        if _POD_NAME.fullmatch(name) and name not in seen["replaced"]:
+            seen["replaced"].add(name)
+            lines.append(f"worker {name} was stuck starting; replacing it")
+    return lines
+
+
 @contextmanager
 def _engine_workers(px, count: int, timeout: int, keep: bool, *, quiet: bool):
     if not count:
@@ -147,7 +181,7 @@ def _engine_workers(px, count: int, timeout: int, keep: bool, *, quiet: bool):
         return
     if not quiet:
         click.echo(f"Starting {count} engine worker(s); a new one can take a few minutes...", err=True)
-    last = {"ready": None, "priced": False}
+    last = {"ready": None, "priced": False, "problems": set(), "replaced": set()}
 
     def progress(state):
         rate = float((state.get("billing") or {}).get("cost_per_worker_hour_usd") or 0)
@@ -159,6 +193,9 @@ def _engine_workers(px, count: int, timeout: int, keep: bool, *, quiet: bool):
         if not quiet and ready != last["ready"]:
             click.echo(f"  {ready}/{count} ready", err=True)
             last["ready"] = ready
+        if not quiet:
+            for line in _worker_problems(state, last):
+                click.echo(f"  {line}", err=True)
 
     with ExitStack() as stack:
         try:
