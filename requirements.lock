@@ -125,9 +125,9 @@ jsonschema-specifications==2025.9.1 \
     --hash=sha256:98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe \
     --hash=sha256:b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d
     # via jsonschema
-prometheux-chain==0.4.10 \
-    --hash=sha256:e222782039046c4c9fa6b9c32182916ae8fc2fa7bdda86c79c7a9b0ed1503cba \
-    --hash=sha256:f6764d01630bdf7a5b0d46c74ea68cfc6bba3756153b2855800cd55e410420e6
+prometheux-chain==0.4.11 \
+    --hash=sha256:4ec64ad329453c62182005a58e47673c872d6634d939ab63a568f97937df2462 \
+    --hash=sha256:f03800e598e8873a081f54b4cd25d4395fa293414c1570bce53f61caf3ece824
     # via prometheux (pyproject.toml)
 pyyaml==6.0.3 \
     --hash=sha256:00c4bdeba853cc34e7dd471f16b4114f4162dc03e6b7afcc2128711f0eca823c \
