@@ -31,7 +31,9 @@ dependencies = [
     # how many evaluations the workspace runs at once.
     # 0.4.11 adds execution_id and stop_evaluation, which `px test` (on Ctrl-C)
     # and `px stop` use to stop one suite's evaluations.
-    "prometheux_chain>=0.4.11",
+    # 0.4.12 keeps connections alive while an evaluation runs, without which a
+    # router may drop them and a large `px test --jobs` loses answers.
+    "prometheux_chain>=0.4.12",
 ]
 
 [project.optional-dependencies]
