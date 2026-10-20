@@ -14,6 +14,8 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.4.3] - 2026-10-20
+
 ### Added
 - `px stop EXECUTION_ID` stops one suite's evaluations on the platform and leaves other
   users' running; `px stop --all` stops everything on the workspace.
