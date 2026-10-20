@@ -435,3 +435,87 @@ def test_replicas_must_be_a_number_or_auto(tmp_path: Path, monkeypatch):
 
     assert result.exit_code == 2
     assert "number or 'auto'" in result.output
+
+
+# ── stopping a suite ──────────────────────────────────────────────────────
+
+class _StoppablePx(_FakePx):
+    def __init__(self, interrupt_after=None):
+        super().__init__()
+        self.execution_ids = []
+        self.stopped = []
+        self.interrupt_after = interrupt_after
+
+    def check_program(self, program, execution_id=None, **kw):
+        self.execution_ids.append(execution_id)
+        if self.interrupt_after is not None and len(self.execution_ids) > self.interrupt_after:
+            raise KeyboardInterrupt
+        return super().check_program(program, **kw)
+
+    def stop_evaluation(self, execution_id=None):
+        self.stopped.append(execution_id)
+        return {"execution_id": execution_id, "engine_stopped": False}
+
+
+def _three_cases(tmp_path, n=3):
+    (tmp_path / "tc.vada").write_text("tc(X,Y) :- edge(X,Y).\n")
+    for i in range(n):
+        (tmp_path / f"c{i}.test.yaml").write_text("program: ./tc.vada\nexpect:\n  tc: [[1, 2]]\n")
+    return tmp_path
+
+
+def test_every_case_of_a_suite_carries_the_same_execution_id(tmp_path: Path, monkeypatch):
+    fake = _StoppablePx()
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_three_cases(tmp_path)), "--jobs", "2"])
+
+    assert result.exit_code == 0, result.output
+    assert len(fake.execution_ids) == 3
+    assert len(set(fake.execution_ids)) == 1
+    assert fake.execution_ids[0].startswith("px-test-")
+    assert fake.stopped == []
+
+
+def test_the_execution_id_can_be_chosen(tmp_path: Path, monkeypatch):
+    fake = _StoppablePx()
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_three_cases(tmp_path)), "--execution-id", "nightly-7"])
+
+    assert result.exit_code == 0, result.output
+    assert set(fake.execution_ids) == {"nightly-7"}
+
+
+def test_ctrl_c_stops_the_suite_on_the_platform(tmp_path: Path, monkeypatch):
+    fake = _StoppablePx(interrupt_after=1)
+    _connect(monkeypatch, fake)
+
+    result = CliRunner().invoke(cli, ["test", str(_three_cases(tmp_path)), "--execution-id", "nightly-7"])
+
+    assert result.exit_code != 0
+    assert fake.stopped == ["nightly-7"]
+    assert "Stopping the suite's evaluations" in result.output
+
+
+def test_px_stop_names_the_suite(monkeypatch):
+    from prometheux_cli.commands import stop as stop_cmd
+    fake = _StoppablePx()
+    monkeypatch.setattr(stop_cmd, "connected_sdk", lambda **k: (fake, "u", "t"))
+
+    result = CliRunner().invoke(cli, ["stop", "nightly-7"])
+
+    assert result.exit_code == 0, result.output
+    assert fake.stopped == ["nightly-7"]
+    assert "engine was left running" in result.output
+
+
+def test_px_stop_without_an_id_needs_all(monkeypatch):
+    from prometheux_cli.commands import stop as stop_cmd
+    fake = _StoppablePx()
+    monkeypatch.setattr(stop_cmd, "connected_sdk", lambda **k: (fake, "u", "t"))
+
+    assert CliRunner().invoke(cli, ["stop"]).exit_code == 2
+    assert CliRunner().invoke(cli, ["stop", "x", "--all"]).exit_code == 2
+    assert CliRunner().invoke(cli, ["stop", "--all"]).exit_code == 0
+    assert fake.stopped == [None]

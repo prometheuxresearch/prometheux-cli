@@ -29,7 +29,9 @@ dependencies = [
     # `px test --jobs` otherwise reports as failed cases.
     # 0.4.10 adds evaluation_status, which `px test --jobs` reads to lower N to
     # how many evaluations the workspace runs at once.
-    "prometheux_chain>=0.4.10",
+    # 0.4.11 adds execution_id and stop_evaluation, which `px test` (on Ctrl-C)
+    # and `px stop` use to stop one suite's evaluations.
+    "prometheux_chain>=0.4.11",
 ]
 
 [project.optional-dependencies]

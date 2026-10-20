@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sys
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
@@ -63,9 +64,11 @@ class WorkersUnavailable(Exception):
               help="Seconds to wait for the workers to be ready; a new worker usually needs a new node.")
 @click.option("--keep-replicas", is_flag=True,
               help="Leave the workers running, and billed, after the suite (they go after 10 idle minutes).")
+@click.option("--execution-id", metavar="ID",
+              help="Id for this suite's evaluations, so `px stop ID` stops them (default: a new one).")
 def run_tests(target: Optional[Path], expects, question, context, expect_csv, expect_pred,
               mode, header, params, save_vada, as_json, junit_xml, jobs, replicas,
-              replicas_timeout, keep_replicas) -> None:
+              replicas_timeout, keep_replicas, execution_id) -> None:
     """Check that Vadalog programs produce the rows you expect.
 
     TARGET is a .vada program (with --expect), a *.test.yaml case, or a folder
@@ -76,6 +79,9 @@ def run_tests(target: Optional[Path], expects, question, context, expect_csv, ex
     A large suite runs faster with --replicas: extra engines beside your running
     compute machine, with cases sent to them in parallel.
 
+    Ctrl-C stops the suite's evaluations on the platform too, and only those;
+    so does `px stop ID` from elsewhere, with the id from --execution-id.
+
     \b
     Examples:
       px test tc.vada --expect tc=tc.csv
@@ -84,6 +90,8 @@ def run_tests(target: Optional[Path], expects, question, context, expect_csv, ex
       px test tests/ --replicas 2
     """
     try:
+        if execution_id is not None and not 0 < len(execution_id) <= 128:
+            raise click.UsageError("--execution-id must be 1 to 128 characters")
         cases = _cases(target, expects, question, context, expect_csv, expect_pred, save_vada,
                        mode, header, _parse_params(params))
         px, _, _ = connected_sdk(require_token=True)
@@ -104,9 +112,14 @@ def run_tests(target: Optional[Path], expects, question, context, expect_csv, ex
         if not as_json:
             _print_result(result, verbose=single)
 
+    execution_id = execution_id or f"px-test-{uuid.uuid4()}"
     try:
         with _engine_workers(px, workers, replicas_timeout, keep_replicas, quiet=as_json):
-            _run_cases(px, cases, jobs, report)
+            try:
+                _run_cases(px, cases, jobs, report, execution_id)
+            except KeyboardInterrupt:
+                _stop_suite(px, execution_id)
+                raise
     except (TimeoutError, WorkersUnavailable) as exc:
         click.echo(click.style("FAIL", fg="red", bold=True) + f": {exc}", err=True)
         sys.exit(EXIT_USAGE)
@@ -238,19 +251,29 @@ def _engine_workers(px, count: int, timeout: int, keep: bool, *, quiet: bool):
                            else "Removing engine workers.", err=True)
 
 
-def _run_cases(px, cases: List[TestCase], jobs: int, report) -> None:
+def _run_cases(px, cases: List[TestCase], jobs: int, report, execution_id: str) -> None:
     """Run the cases, `jobs` at a time, reporting each in case order."""
     if jobs <= 1 or len(cases) <= 1:
         for case in cases:
-            report(run_case(px, case))
+            report(run_case(px, case, execution_id))
         return
     pool = ThreadPoolExecutor(max_workers=min(jobs, len(cases)))
     try:
-        for result in pool.map(lambda case: run_case(px, case), cases):
+        for result in pool.map(lambda case: run_case(px, case, execution_id), cases):
             report(result)
     finally:
         # On Ctrl-C, stop queuing cases instead of waiting for the whole suite.
         pool.shutdown(wait=False, cancel_futures=True)
+
+
+def _stop_suite(px, execution_id: str) -> None:
+    """Stop the suite's evaluations still on the platform, so they don't keep
+    the engine busy, and the cases already sent return instead of being waited for."""
+    click.echo("\nStopping the suite's evaluations...", err=True)
+    try:
+        px.stop_evaluation(execution_id)
+    except Exception as exc:
+        click.echo(f"Could not stop them: {exc}. `px stop {execution_id}` tries again.", err=True)
 
 
 def _cases(target, expects, question, context, expect_csv, expect_pred, save_vada,

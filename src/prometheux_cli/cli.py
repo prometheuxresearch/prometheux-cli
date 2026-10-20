@@ -26,6 +26,7 @@ from .commands import show as show_cmd
 from .commands import skill as skill_cmd
 from .commands import snapshot as snapshot_cmd
 from .commands import status as status_cmd
+from .commands import stop as stop_cmd
 from .commands import template as template_cmd
 from .commands import validate as validate_cmd
 
@@ -63,6 +64,7 @@ cli.add_command(run_cmd.run)
 cli.add_command(show_cmd.show)
 cli.add_command(query_cmd.query)
 cli.add_command(checks_cmd.run_tests)
+cli.add_command(stop_cmd.stop)
 cli.add_command(search_cmd.search)
 cli.add_command(status_cmd.status)
 cli.add_command(context_cmd.context)

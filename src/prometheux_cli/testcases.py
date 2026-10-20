@@ -108,14 +108,16 @@ def program_case(program_path: Path, expect: Dict[str, str], *, mode: str,
                     expect=expect or None, mode=mode, header=header, params=params)
 
 
-def run_case(px, case: TestCase):
+def run_case(px, case: TestCase, execution_id: Optional[str] = None):
     if case.question is not None:
         report = px.check_question(case.question, expect=case.expect, mode=case.mode,
                                    expect_predicate=case.expect_predicate, context=case.context,
-                                   params=case.params or None, header=case.header)
+                                   params=case.params or None, header=case.header,
+                                   execution_id=execution_id)
     else:
         report = px.check_program(case.program, expect=case.expect, mode=case.mode,
-                                  params=case.params or None, header=case.header)
+                                  params=case.params or None, header=case.header,
+                                  execution_id=execution_id)
     return CaseResult(case=case, report=report)
 
 

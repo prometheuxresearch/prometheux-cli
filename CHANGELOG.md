@@ -14,6 +14,16 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+### Added
+- `px stop EXECUTION_ID` stops one suite's evaluations on the platform and leaves other
+  users' running; `px stop --all` stops everything on the workspace.
+- `px test --execution-id ID` names the suite for `px stop` (default: a new id per run).
+
+### Changed
+- Ctrl-C on `px test` stops the suite's evaluations on the platform too, so the cases already
+  sent return at once instead of occupying the engine until they finish.
+- Requires `prometheux_chain>=0.4.11`, which adds `execution_id` and `stop_evaluation()`.
+
 ## [0.4.2] - 2026-10-19
 
 ### Changed

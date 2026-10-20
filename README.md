@@ -292,6 +292,12 @@ Each `--question` and each question case counts as one program generation in you
 | `--replicas N\|auto` | Run N engine workers beside your compute machine for the suite, then remove them. `auto`: one per 10 cases, up to the platform cap. |
 | `--replicas-timeout SECONDS` | How long to wait for the workers to be ready (default 600). |
 | `--keep-replicas` | Leave the workers running, and billed, after the suite; they are removed after 10 idle minutes. |
+| `--execution-id ID` | Id sent with every case of the suite, so `px stop ID` stops it (default: a new one per run). |
+
+**Stopping a suite.** Ctrl-C stops the suite's evaluations on the platform as well, so the cases
+already sent return at once and stop occupying the engine; other users' evaluations keep
+running. From another shell or a CI cancel step, `px stop ID` does the same for a suite started
+with `--execution-id ID`.
 
 **Running a large suite faster.** With a compute machine running, `--replicas N` starts N
 engine-only workers beside it, waits until they are ready, runs the cases N+1 at a time across
@@ -323,6 +329,18 @@ px test tests/ --replicas 2
 
 The same checks are available in Python as `prometheux_chain.check_program` and
 `check_question`.
+
+### `px stop [EXECUTION_ID]`
+Stop the evaluations sent with `EXECUTION_ID` (the `--execution-id` of a `px test` run), or the
+run with that id. Their callers get "Execution stopped by user." within a second, and calls
+with the id that arrive later are refused for a few minutes. The engine itself is stopped only
+when nothing else is running on it. `px stop --all` stops every evaluation and run on the
+workspace, other users' included, like the Stop button.
+
+```bash
+px test tests/ --execution-id nightly-1234 &
+px stop nightly-1234
+```
 
 ### `px status`
 Monitor run status **account-wide** — no workspace needed. One row per ontology: running /
