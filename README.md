@@ -635,6 +635,7 @@ src/prometheux_cli/
   schemas/          # published JSON Schemas — the single source of truth
   scaffold/         # `px init` starter workspace
 tests/
+sdk-coverage.yaml   # every prometheux_chain export px does not call, and why (the backlog)
 examples/           # copy-and-run usage examples (one folder each)
 stress-tests/       # regression scenarios + adversarial (chaos) harnesses
 ```
@@ -643,6 +644,17 @@ stress-tests/       # regression scenarios + adversarial (chaos) harnesses
 ```bash
 pytest -q
 ```
+
+**Coverage guards.** `px` should offer every tool the platform exposes through
+`prometheux_chain`, and AI agents should be able to find every command. Two tests enforce this:
+
+- `tests/test_sdk_coverage.py`: every public SDK export is either called by px or listed in
+  `sdk-coverage.yaml` with a reason: `gap`, `covered`, `helper`, `internal`, `ui-only` or
+  `deprecated`. A new SDK export fails CI until it is exposed or classified. The `gap`
+  entries are the backlog of capabilities px does not offer yet. To close one, add the
+  command and delete the entry.
+- `tests/test_skill.py`: every command and flag appears in the command reference that
+  `px skill install` ships (`templates/skill_commands.md`), and nothing there is stale.
 
 ## Release history
 
