@@ -14,6 +14,13 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.4.4] - 2026-10-21
+
+### Fixed
+- The command reference that `px skill install` gives AI agents (Claude Code skill and
+  Cursor rule) now lists `px test` and `px stop`. Until now an agent using the px skill
+  did not know either command existed.
+
 ## [0.4.3] - 2026-10-20
 
 ### Added
