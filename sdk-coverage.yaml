@@ -1,0 +1,115 @@
+# How px reflects every public export of prometheux_chain.
+#
+# The goal: px offers every tool the platform exposes through the SDK. Exports that px calls
+# (`px.<name>` anywhere in src/) are exposed and need no entry; tests/test_sdk_coverage.py
+# finds them in the source. Every other export must be listed here with a reason:
+#
+#   gap         a real capability px does not offer yet. These entries are the backlog.
+#   covered     reachable through an existing command without calling it directly (name it in `px`)
+#   helper      a building block other SDK calls use; nothing to expose on its own
+#   internal    plumbing users never call
+#   ui-only     only meaningful inside the web app
+#   deprecated  deprecated in the SDK; px will not adopt it
+#
+# The test fails when an export has no entry, when an entry names something the SDK no longer
+# exports, when px now calls a listed export (remove it: it is exposed), or when a `covered`
+# entry names a px command that does not exist. Closing a gap = add the command, delete the entry.
+
+not_exposed:
+  # ── gaps: the backlog, grouped by area ─────────────────────────────────────
+  # sharing
+  create_share: {reason: gap, area: sharing, note: "Share an ontology with another user."}
+  list_shares: {reason: gap, area: sharing, note: "Shares you created."}
+  list_inbox: {reason: gap, area: sharing, note: "Shares offered to you."}
+  accept_share: {reason: gap, area: sharing, note: "Accept a pending share."}
+  leave_share: {reason: gap, area: sharing, note: "Leave a share you received."}
+  revoke_share: {reason: gap, area: sharing, note: "Revoke a share you created."}
+  update_share_role: {reason: gap, area: sharing, note: "Switch a share between viewer and editor."}
+  # API tokens / account
+  issue_token: {reason: gap, area: account, note: "Issue an API token (e.g. for CI)."}
+  list_tokens: {reason: gap, area: account, note: "List your active API tokens."}
+  revoke_token: {reason: gap, area: account, note: "Revoke the current token (logout)."}
+  revoke_specific_token: {reason: gap, area: account, note: "Revoke one token by id."}
+  revoke_all_tokens: {reason: gap, area: account, note: "Revoke every token (logout everywhere)."}
+  get_role: {reason: gap, area: account, note: "Your role on the platform (a whoami)."}
+  get_usage_status: {reason: gap, area: account, note: "LLM / embedding usage against limits."}
+  get_login_activity: {reason: gap, area: account, note: "Sessions and IPs that reached your pod."}
+  load_user_config: {reason: gap, area: account, note: "Read user settings (LLM provider, model)."}
+  save_user_config: {reason: gap, area: account, note: "Change user settings."}
+  list_llm_models: {reason: gap, area: account, note: "Models available for an LLM provider."}
+  # ontologies and concepts
+  copy_ontology: {reason: gap, area: ontologies, note: "Copy an ontology."}
+  create_ontology_from_context: {reason: gap, area: ontologies, note: "Generate an ontology from free text and files."}
+  rename_concept: {reason: gap, area: ontologies, note: "Rename a concept and update its dependents (a file rename + apply recreates it instead)."}
+  generate_concept_description: {reason: gap, area: ontologies, note: "Generate a concept's natural-language description."}
+  get_concept_description: {reason: gap, area: ontologies, note: "Read a concept's description."}
+  download_concept: {reason: gap, area: ontologies, note: "Export a concept's rows to CSV, or download an ontology file."}
+  llm_analysis: {reason: gap, area: ontologies, note: "Ask an LLM a question grounded in predicate tables."}
+  # files on the workspace disk
+  list_files: {reason: gap, area: files, note: "List files on the workspace disk."}
+  move_file: {reason: gap, area: files, note: "Move or rename a file on the workspace disk."}
+  delete_files: {reason: gap, area: files, note: "Delete files on the workspace disk."}
+  # data sources
+  refresh_sources: {reason: gap, area: data, note: "Reconnect stored data sources and reconcile the list."}
+  infer_schema: {reason: gap, area: data, note: "Infer the schema of a database connection."}
+  all_pairs_join: {reason: gap, area: data, note: "Which data sources can be joined, pairwise."}
+  # context layer
+  create_context_notes_from_file: {reason: gap, area: context, note: "Ingest an uploaded document as context notes."}
+  auto_seed: {reason: gap, area: context, note: "Profile data sources and write observation notes."}
+  # translation to Vadalog
+  translate_sql_to_vadalog: {reason: gap, area: translation, note: "SQL to Vadalog."}
+  translate_rdf_to_vadalog: {reason: gap, area: translation, note: "RDF to Vadalog."}
+  translate_owl_to_vadalog: {reason: gap, area: translation, note: "OWL to Vadalog rules."}
+  import_owl: {reason: gap, area: translation, note: "Import an OWL document as an ontology schema."}
+  # graph analytics
+  run_graph_analytics: {reason: gap, area: graph, note: "Run pagerank / components / paths over an edge predicate."}
+  list_graph_functions: {reason: gap, area: graph, note: "Available graph analytics functions."}
+  # alerts
+  get_alert_history: {reason: gap, area: alerts, note: "Past alerts."}
+  reprocess_alert: {reason: gap, area: alerts, note: "Re-run an alert's concept."}
+  # AI agent and its sessions
+  agent_chat: {reason: gap, area: agent, note: "Talk to the Vadalog AI agent from the terminal."}
+  agent_reset: {reason: gap, area: agent, note: "Clear an agent conversation."}
+  list_sessions: {reason: gap, area: agent, note: "Recent agent chat sessions."}
+  get_session: {reason: gap, area: agent, note: "One chat session with its messages."}
+  rename_session: {reason: gap, area: agent, note: "Rename a chat session."}
+  delete_session: {reason: gap, area: agent, note: "Delete a chat session."}
+  # compute
+  check_compute_availability: {reason: gap, area: compute, note: "Check that compute resources are reachable before using them."}
+
+  # ── covered by an existing command ─────────────────────────────────────────
+  load_ontology: {reason: covered, px: [px pull], note: "px pull exports the whole ontology."}
+  load_ontology_schema: {reason: covered, px: [px pull], note: "The schema lands in ontology/schema.yaml."}
+  add_to_lineage: {reason: covered, px: [px apply], note: "Schema nodes and edges come from ontology/schema.yaml."}
+  update_concept_ontology_schema_type: {reason: covered, px: [px apply], note: "Node / edge roles come from ontology/schema.yaml."}
+  get_context_note: {reason: covered, px: [px context pull, px list context], note: "Notes are pulled into files."}
+  get_execution_status: {reason: covered, px: [px status], note: "Per-ontology run status."}
+  run_concept_stream: {reason: covered, px: [px run, px status], note: "px run waits for the run; px status --watch streams progress."}
+  search_results: {reason: covered, px: [px query, px show], note: "Filter a predicate's rows with SQL, or page through them."}
+  evaluate_program: {reason: covered, px: [px test], note: "px test evaluates programs on the engine."}
+  generate_program: {reason: covered, px: [px test], note: "px test --question generates the program (--save-vada keeps it)."}
+  get_machine_status: {reason: covered, px: [px compute status], note: "Machine state."}
+  set_engine_workers: {reason: covered, px: [px test], note: "px test --replicas manages engine workers."}
+  wait_for_engine_workers: {reason: covered, px: [px test], note: "px test --replicas waits for the workers."}
+
+  # ── helpers, internals, web-app only, deprecated ──────────────────────────
+  CheckReport: {reason: helper, note: "Return type of check_program / check_question."}
+  PredicateCheck: {reason: helper, note: "Part of CheckReport."}
+  compare_rows: {reason: helper, note: "The row comparison check_program runs."}
+  read_expected_csv: {reason: helper, note: "CSV reader check_program uses."}
+  analyze_program: {reason: helper, note: "Program analysis used while saving concepts."}
+  parse_binds: {reason: helper, note: "Bind parsing used while saving concepts."}
+  build_bind: {reason: helper, note: "Builds a bind annotation string."}
+  list_sheets: {reason: helper, note: "Sheet discovery while connecting a spreadsheet source."}
+  sync_inbox: {reason: internal, note: "Reconciles the local share vault; runs as part of share calls."}
+  build_graph: {reason: ui-only, note: "Graph visualization payload for the web app."}
+  visualize_concept_lineage: {reason: ui-only, note: "Lineage graph payload for the web app."}
+  ontology_text: {reason: ui-only, note: "The web app's Document view."}
+  reorder_concepts: {reason: ui-only, note: "Display order in the web app."}
+  list_demo_sources: {reason: ui-only, note: "Onboarding demo sources."}
+  onboarding_status: {reason: ui-only, note: "Onboarding flow."}
+  interview_template: {reason: ui-only, note: "Onboarding interview."}
+  submit_interview: {reason: ui-only, note: "Onboarding interview."}
+  export_workspace: {reason: deprecated, note: "Deprecated in prometheux_chain 0.4.3."}
+  import_workspace: {reason: deprecated, note: "Deprecated in prometheux_chain 0.4.3."}
+  import_ontology: {reason: deprecated, note: "Deprecated in prometheux_chain 0.4.3 (px apply imports from files)."}
