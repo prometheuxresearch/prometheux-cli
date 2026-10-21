@@ -14,6 +14,17 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.4.5] - 2026-10-21
+
+### Fixed
+- The command reference that `px skill install` gives AI agents (Claude Code skill and
+  Cursor rule) now covers every command. 37 were missing: `px show`, `px query`, `px list`,
+  `px search`, `px policy`, `px snapshot`, `px app`, `px datasource`, `px compute`,
+  `px template`, `px playbook`, `px skill install`, and `px context pull` / `search`.
+  It also documented `-p/--ontology` where the flag is `-o/--ontology`, and it was missing
+  `px apply --no-context`, `px run --run-mode` and `px validate --online`. A test now fails
+  whenever a command or flag is missing from the reference, or the reference names one that
+  does not exist.
 ## [0.4.4] - 2026-10-21
 
 ### Fixed
