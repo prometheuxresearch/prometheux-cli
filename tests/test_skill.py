@@ -65,3 +65,9 @@ def test_install_is_idempotent_and_respects_force(tmp_path: Path):
     assert "skip" in second.output and "already exists" in second.output
     # with --force it overwrites (exit 0)
     assert runner.invoke(cli, args + ["--force"]).exit_code == 0
+
+
+def test_skill_md_lists_test_and_stop():
+    md = render_skill_md()
+    assert "**`px test [TARGET]`**" in md
+    assert "**`px stop [EXECUTION_ID]`**" in md

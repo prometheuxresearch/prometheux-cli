@@ -1,8 +1,8 @@
 ## The `px` CLI — command reference
 
 `px` is installed on the user's PATH. You drive it by running shell commands. `init` and
-`validate` work fully offline; `login`, `pull`, `plan`, `apply`, `run`, `context`, `status`,
-and `delete` reach the platform (auth via `px login`, or `JARVISPY_URL` + `PMTX_TOKEN` env).
+`validate` work fully offline; `login`, `pull`, `plan`, `apply`, `run`, `test`, `stop`, `context`,
+`status`, and `delete` reach the platform (auth via `px login`, or `JARVISPY_URL` + `PMTX_TOKEN` env).
 
 - **`px init [DIR]`** — scaffold a workspace (schemas, example ontology, this guide).
   `--name TEXT`, `--force` (write into a non-empty dir).
@@ -26,6 +26,15 @@ and `delete` reach the platform (auth via `px login`, or `JARVISPY_URL` + `PMTX_
   (idempotent via `.px/context-state.json`; commit that file). `-y/--yes`, `--prune`.
 - **`px status`** — one row per ontology: current/latest run status + executing concept.
   `-w/--watch`, `-i/--interval FLOAT`.
+- **`px test [TARGET]`** — unit-test Vadalog programs on the platform engine. TARGET is a
+  `.vada` program (with `--expect PRED=CSV`, repeatable), a `*.test.yaml` case, or a folder of
+  cases; or `-q/--question TEXT` + `--expect-csv FILE` checks the program the NL translator
+  writes. `--mode exact|contains`, `--header`, `--param KEY=VALUE`, `--json`,
+  `--junit-xml FILE`, `-j/--jobs N`, `--replicas N|auto` (billed engine workers for the
+  suite), `--execution-id ID`. Exit 0 all pass / 1 a check failed / 2 could not run.
+- **`px stop [EXECUTION_ID]`** — stop the evaluations sent with that id (a `px test
+  --execution-id`) or the run with that id; other users' work keeps running. `--all` stops
+  every evaluation and run on the workspace, other users' included.
 - **`px delete ONTOLOGY`** — permanently delete an ontology by id or name (server auto-snapshots
   first; local files untouched). `-y/--yes`.
 
