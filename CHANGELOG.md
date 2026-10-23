@@ -14,6 +14,14 @@ would break a script.
      version and open a fresh [Unreleased] section above it. The release workflow
      publishes the matching section as the GitHub Release notes. -->
 
+## [0.4.6] - 2026-10-21
+
+### Fixed
+- A large `px test --jobs` run over some networks no longer loses cases to "timed out
+  after 300.0s" while the platform had already answered them. Requires
+  `prometheux_chain>=0.4.12`, which keeps connections alive during an evaluation and
+  tries again a connection that does not open.
+
 ## [0.4.5] - 2026-10-21
 
 ### Fixed
